@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#149a82"/>
+      <stop offset="0.55" stop-color="#0e7c6b"/>
+      <stop offset="1" stop-color="#085a4d"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- squircle background -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <!-- top sheen -->
+  <rect x="100" y="100" width="824" height="412" rx="185" fill="url(#sheen)"/>
+  <!-- hairline edge light -->
+  <rect x="102" y="102" width="820" height="820" rx="183" fill="none"
+        stroke="#ffffff" stroke-opacity="0.12" stroke-width="4"/>
+
+  <!-- Markdown mark (Dustin Curtis, CC0) — soft drop shadow, then glyphs -->
+  <g transform="translate(190 320) scale(3.1)">
+    <g transform="translate(0 3)" fill="#053f36" opacity="0.35">
+      <path d="M30 98V30h20l20 25 20-25h20v68H90V59L70 84 50 59v39z"/>
+      <path d="m155 98-30-33h20V30h20v35h20z"/>
+    </g>
+    <path d="M30 98V30h20l20 25 20-25h20v68H90V59L70 84 50 59v39z" fill="#ffffff"/>
+    <path d="m155 98-30-33h20V30h20v35h20z" fill="#c9a24b"/>
+  </g>
+</svg>
