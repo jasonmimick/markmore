@@ -7,9 +7,10 @@
 `cat` dumps it, `more` pages it, `glow` styles it in the terminal. `moremark` renders your markdown the way it's meant to look — GitHub styling, syntax-highlighted code, mermaid diagrams — in a native macOS window, straight from the CLI. One Swift file. No Electron. ~5MB.
 
 ```sh
+moremark                  # right here — opens ./README.md, or a folder index
 moremark README.md        # native window, GitHub rendering, live reload
-moremark docs/            # browse a folder — README or a generated index
-git log | moremark -      # preview stdin
+moremark docs/            # browse a folder
+git log | moremark        # preview stdin
 ```
 
 The window detaches — your prompt comes right back, no `&` needed.

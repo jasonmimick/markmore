@@ -98,9 +98,13 @@ func hexDump(_ bytes: [UInt8]) -> String {
 var initialFile: URL? = nil
 var stdinMD: String? = nil
 
-let cliArgs = CommandLine.arguments
+var cliArgs = CommandLine.arguments
+if cliArgs.count == 1 {
+    // Bare `moremark`: piped input becomes stdin mode, a terminal means "here".
+    cliArgs.append(isatty(0) == 0 ? "-" : ".")
+}
 guard cliArgs.count >= 2, !["-h", "--help"].contains(cliArgs[1]) else {
-    die("usage: moremark <file.md | folder>   or   ... | moremark -", code: 64)
+    die("usage: moremark [file.md | folder]   or   ... | moremark", code: 64)
 }
 if cliArgs[1] == "--stdin-file", cliArgs.count == 3 {
     stdinMD = (try? String(contentsOfFile: cliArgs[2], encoding: .utf8)) ?? ""
@@ -115,7 +119,7 @@ if cliArgs[1] == "--stdin-file", cliArgs.count == 3 {
     }
     initialFile = resolveTarget(url)
 } else {
-    die("usage: moremark <file.md | folder>   or   ... | moremark -", code: 64)
+    die("usage: moremark [file.md | folder]   or   ... | moremark", code: 64)
 }
 
 // Detach from the shell: after validating args, re-exec ourselves in the
@@ -192,12 +196,77 @@ func pageHTML(baseHref: String) -> String {
     }
     body.tabs-on { padding-top: 32px; }
     body.side-on { padding-left: 220px; }
+    #welcome { display: none; position: fixed; inset: 0; z-index: 20; align-items: center;
+      justify-content: center; background: rgba(15, 23, 30, 0.35); backdrop-filter: blur(6px); }
+    .wcard { position: relative; overflow: hidden; width: min(440px, 86vw); text-align: center;
+      background: #ffffff; color: #1f2328; border-radius: 16px; padding: 34px 34px 56px;
+      box-shadow: 0 24px 70px rgba(0,0,0,0.35);
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, sans-serif;
+      animation: wpop 0.35s cubic-bezier(0.2, 1.4, 0.4, 1); }
+    @keyframes wpop { from { transform: scale(0.92) translateY(14px); opacity: 0; } }
+    .wlogo { width: 64px; height: 64px; margin: 0 auto 12px; border-radius: 15px;
+      background: linear-gradient(#149a82, #085a4d); color: #fff;
+      font: 800 26px -apple-system; display: flex; align-items: center; justify-content: center; }
+    .wcard h1 { margin: 0; font-size: 24px; border: 0; padding: 0; }
+    .wtag { color: #59636e; margin: 4px 0 18px; }
+    .wfam { display: flex; gap: 6px; justify-content: center; align-items: center; margin-bottom: 20px; }
+    .wchip, .warr { opacity: 0; animation: win 0.4s ease forwards; }
+    .wchip { font: 12px ui-monospace, monospace; padding: 3px 9px; border-radius: 999px;
+      background: #f6f8fa; border: 1px solid #d1d9e0; }
+    .wchip:nth-child(1) { animation-delay: 0.3s; } .warr:nth-child(2) { animation-delay: 0.5s; }
+    .wchip:nth-child(3) { animation-delay: 0.7s; } .warr:nth-child(4) { animation-delay: 0.9s; }
+    .wchip:nth-child(5) { animation-delay: 1.1s; } .warr:nth-child(6) { animation-delay: 1.3s; }
+    .wchip.wme { animation-delay: 1.5s; background: #0e7c6b; border-color: #0e7c6b; color: #fff; }
+    @keyframes win { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; } }
+    .wtips { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; text-align: left;
+      margin: 0 auto 16px; width: fit-content; color: #59636e; font-size: 13px; }
+    kbd { font: 11px ui-monospace, monospace; padding: 2px 6px; border-radius: 5px;
+      background: #f6f8fa; border: 1px solid #d1d9e0; border-bottom-width: 2px; color: #1f2328; }
+    .wlive { color: #59636e; font-size: 13px; margin: 0 0 18px; }
+    #wgo { background: #0e7c6b; color: #fff; border: 0; border-radius: 8px; padding: 9px 22px;
+      font: 600 14px -apple-system; cursor: pointer; }
+    #wgo:hover { background: #149a82; }
+    .wcat { position: absolute; bottom: 8px; left: 0; font-size: 20px;
+      animation: wwalk 7s linear infinite alternate; }
+    @keyframes wwalk {
+      0% { transform: translateX(20px) scaleX(-1); }
+      49% { transform: translateX(360px) scaleX(-1); }
+      51% { transform: translateX(360px) scaleX(1); }
+      100% { transform: translateX(20px) scaleX(1); }
+    }
+    @media (prefers-color-scheme: dark) {
+      .wcard { background: #161b22; color: #f0f6fc; }
+      .wtag, .wtips, .wlive { color: #9198a1; }
+      .wchip { background: #21262d; border-color: #3d444d; color: #f0f6fc; }
+      .wchip.wme { background: #0e7c6b; border-color: #0e7c6b; }
+      kbd { background: #21262d; border-color: #3d444d; color: #f0f6fc; }
+    }
     </style>
     <script>\#(resource(markedJSBase64))</script>
     <script>\#(resource(hljsJSBase64))</script>
     <script>\#(resource(mermaidJSBase64))</script>
     </head><body><nav id="tabbar"></nav><nav id="sidebar"></nav>
     <article id="content" class="markdown-body"></article>
+    <div id="welcome"><div class="wcard">
+      <div class="wlogo">M↓</div>
+      <h1>moremark</h1>
+      <p class="wtag">more for markdown — the one that opens a window.</p>
+      <div class="wfam">
+        <span class="wchip">cat</span><span class="warr">→</span>
+        <span class="wchip">more</span><span class="warr">→</span>
+        <span class="wchip">less</span><span class="warr">→</span>
+        <span class="wchip wme">moremark</span>
+      </div>
+      <div class="wtips">
+        <div><kbd>⌘B</kbd> file tree</div>
+        <div><kbd>⌘⇧H</kbd> hex dump</div>
+        <div><kbd>⌘[</kbd> <kbd>⌘]</kbd> back / forward</div>
+        <div><kbd>⌘W</kbd> back to work</div>
+      </div>
+      <p class="wlive">edits live-reload — leave the window open while you write ✏️</p>
+      <button id="wgo">Let's go</button>
+      <div class="wcat">🐈‍⬛</div>
+    </div></div>
     <script>
     var darkMQ = window.matchMedia('(prefers-color-scheme: dark)');
     function __update(md) {
@@ -300,6 +369,13 @@ func pageHTML(baseHref: String) -> String {
       }
       build(nodes, side);
     }
+    function __welcome(show) {
+      document.getElementById('welcome').style.display = show ? 'flex' : 'none';
+    }
+    document.getElementById('wgo').addEventListener('click', function () {
+      __welcome(false);
+      window.webkit.messageHandlers.tabs.postMessage({ action: 'welcomed', path: '' });
+    });
     darkMQ.addEventListener('change', function () {
       if (window.__lastMd !== undefined) __update(window.__lastMd);
     });
@@ -308,7 +384,20 @@ func pageHTML(baseHref: String) -> String {
     """#
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler {
+// WKWebView eats Cmd+[ / Cmd+] for its own page history — hand them back
+// to the main menu so our Back/Forward (with proper state) run instead.
+final class PreviewWebView: WKWebView {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.modifierFlags.contains(.command),
+           let chars = event.charactersIgnoringModifiers, ["[", "]"].contains(chars) {
+            return false
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation,
+                         WKNavigationDelegate, WKScriptMessageHandler {
     var window: NSWindow!
     var webView: WKWebView!
     var source: DispatchSourceFileSystemObject?
@@ -322,6 +411,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     var pageCounter = 0
     var currentPageFile: URL?
     var hexMode = false
+    var backButton: NSButton!
+    var forwardButton: NSButton!
 
     // Sidebar root stays anchored to where moremark was opened.
     let treeRoot: URL? = initialFile.map { isDir($0) ? $0 : $0.deletingLastPathComponent() }
@@ -338,7 +429,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         let config = WKWebViewConfiguration()
         config.userContentController.add(self, name: "tabs")
-        webView = WKWebView(frame: .zero, configuration: config)
+        webView = PreviewWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
 
         window = NSWindow(
@@ -348,6 +439,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         window.contentView = webView
         window.center()
         window.setFrameAutosaveName("moremark")
+
+        func navButton(_ symbol: String, tip: String, action: Selector) -> NSButton {
+            let b = NSButton(image: NSImage(systemSymbolName: symbol, accessibilityDescription: tip)!,
+                             target: self, action: action)
+            b.bezelStyle = .texturedRounded
+            b.isBordered = true
+            b.toolTip = tip
+            return b
+        }
+        backButton = navButton("chevron.left", tip: "Back (⌘[)", action: #selector(goBack))
+        forwardButton = navButton("chevron.right", tip: "Forward (⌘])", action: #selector(goForward))
+        let stack = NSStackView(views: [backButton, forwardButton])
+        stack.spacing = 2
+        stack.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 4)
+        let accessory = NSTitlebarAccessoryViewController()
+        accessory.view = stack
+        accessory.layoutAttribute = .leading
+        window.addTitlebarAccessoryViewController(accessory)
+
         window.makeKeyAndOrderFront(nil)
 
         // CLI-spawned processes need to steal focus after the window exists;
@@ -381,6 +491,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         currentPageFile = pageFile
         try? pageHTML(baseHref: baseHref).write(to: pageFile, atomically: true, encoding: .utf8)
         webView.loadFileURL(pageFile, allowingReadAccessTo: URL(fileURLWithPath: "/"))
+        backButton.isEnabled = !backStack.isEmpty
+        forwardButton.isEnabled = !forwardStack.isEmpty
         watch()
     }
 
@@ -393,6 +505,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             pendingFragment = nil
             scrollTo(fragment: frag)
         }
+        if !UserDefaults.standard.bool(forKey: "welcomed") {
+            webView.evaluateJavaScript("__welcome(true)", completionHandler: nil)
+        }
+    }
+
+    @objc func showWelcome() {
+        webView.evaluateJavaScript("__welcome(true)", completionHandler: nil)
     }
 
     func scrollTo(fragment: String) {
@@ -514,6 +633,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             } else {
                 pushTabs()
             }
+        case "welcomed":
+            UserDefaults.standard.set(true, forKey: "welcomed")
         default: break
         }
     }
@@ -684,6 +805,7 @@ let mainMenu = NSMenu()
 let appMenuItem = NSMenuItem(); mainMenu.addItem(appMenuItem)
 let appMenu = NSMenu()
 appMenu.addItem(withTitle: "About moremark", action: #selector(AppDelegate.showAbout), keyEquivalent: "")
+appMenu.addItem(withTitle: "Welcome to moremark", action: #selector(AppDelegate.showWelcome), keyEquivalent: "")
 appMenu.addItem(NSMenuItem.separator())
 appMenu.addItem(withTitle: "Hide moremark", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
 appMenu.addItem(NSMenuItem.separator())

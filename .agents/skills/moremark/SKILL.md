@@ -18,6 +18,7 @@ The brew formula builds from source in seconds; no Gatekeeper prompts.
 ## Usage
 
 ```sh
+moremark                       # current dir: README.md or folder index
 moremark path/to/file.md       # detaches on its own — the shell prompt returns immediately
 some-command | moremark -      # preview stdin
 moremark docs/                 # browse a folder (README or generated index)
