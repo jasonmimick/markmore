@@ -1,6 +1,6 @@
-// moremark — minimal native Markdown previewer for the CLI.
-// Usage: moremark <file.md>   or   ... | moremark -
-// Live-reloads on save, follows relative .md links (Cmd+[ / Cmd+] history), Cmd+W to close.
+// moremark — more for markdown: native macOS previewer for the CLI.
+// Usage: moremark <file.md | folder>   or   ... | moremark -
+// Live reload, in-window .md navigation (Cmd+[ / Cmd+]), history tabs, Cmd+W to close.
 
 import Cocoa
 import WebKit
@@ -10,12 +10,53 @@ func die(_ msg: String, code: Int32) -> Never {
     exit(code)
 }
 
+let markdownExts: Set<String> = ["md", "markdown", "mdown", "mkd"]
+
+func isDir(_ url: URL) -> Bool {
+    var d: ObjCBool = false
+    return FileManager.default.fileExists(atPath: url.path, isDirectory: &d) && d.boolValue
+}
+
+// Opening a folder shows its README if it has one, else a generated index.
+func resolveTarget(_ url: URL) -> URL {
+    guard isDir(url) else { return url }
+    if let items = try? FileManager.default.contentsOfDirectory(atPath: url.path),
+       let readme = items.first(where: { $0.lowercased() == "readme.md" }) {
+        return url.appendingPathComponent(readme).standardizedFileURL
+    }
+    return url
+}
+
+func indexMarkdown(for dir: URL) -> String {
+    let fm = FileManager.default
+    let items = (try? fm.contentsOfDirectory(
+        at: dir, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])) ?? []
+    var dirs: [String] = [], files: [String] = []
+    for item in items {
+        if isDir(item) { dirs.append(item.lastPathComponent) }
+        else if markdownExts.contains(item.pathExtension.lowercased()) { files.append(item.lastPathComponent) }
+    }
+    dirs.sort { $0.lowercased() < $1.lowercased() }
+    files.sort { $0.lowercased() < $1.lowercased() }
+    var md = "# \(dir.lastPathComponent)/\n\n"
+    if dirs.isEmpty && files.isEmpty { return md + "_No markdown files here._\n" }
+    for d in dirs {
+        let enc = d.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? d
+        md += "- 🗂 [\(d)/](\(enc)/)\n"
+    }
+    for f in files {
+        let enc = f.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? f
+        md += "- [\(f)](\(enc))\n"
+    }
+    return md
+}
+
 var initialFile: URL? = nil
 var stdinMD: String? = nil
 
 let cliArgs = CommandLine.arguments
 guard cliArgs.count == 2, !["-h", "--help"].contains(cliArgs[1]) else {
-    die("usage: moremark <file.md>   or   ... | moremark -", code: 64)
+    die("usage: moremark <file.md | folder>   or   ... | moremark -", code: 64)
 }
 if cliArgs[1] == "-" {
     let data = FileHandle.standardInput.readDataToEndOfFile()
@@ -25,7 +66,7 @@ if cliArgs[1] == "-" {
     guard FileManager.default.fileExists(atPath: url.path) else {
         die("moremark: no such file: \(url.path)", code: 66)
     }
-    initialFile = url
+    initialFile = resolveTarget(url)
 }
 
 func resource(_ b64: String) -> String {
@@ -43,11 +84,26 @@ body { margin: 0; background: #ffffff; }
 .markdown-body { max-width: 980px; margin: 0 auto; padding: 45px; }
 @media (max-width: 767px) { .markdown-body { padding: 24px; } }
 .mermaid { display: flex; justify-content: center; margin-bottom: 16px; }
+#tabbar { display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 9;
+  gap: 2px; padding: 6px 8px 0; overflow-x: auto;
+  background: #f6f8fa; border-bottom: 1px solid #d1d9e0;
+  font: 12px -apple-system, BlinkMacSystemFont, sans-serif; }
+.tab { display: flex; align-items: center; gap: 6px; padding: 5px 10px; white-space: nowrap;
+  color: #59636e; border: 1px solid transparent; border-radius: 6px 6px 0 0; cursor: default; }
+.tab.active { background: #ffffff; color: #1f2328; border-color: #d1d9e0; border-bottom-color: #ffffff; }
+.tab .x { opacity: 0.45; cursor: pointer; padding: 0 2px; }
+.tab .x:hover { opacity: 1; }
+@media (prefers-color-scheme: dark) {
+  #tabbar { background: #161b22; border-color: #3d444d; }
+  .tab { color: #9198a1; }
+  .tab.active { background: #0d1117; color: #f0f6fc; border-color: #3d444d; border-bottom-color: #0d1117; }
+}
+body.tabs-on { padding-top: 32px; }
 </style>
 <script>\#(resource(markedJSBase64))</script>
 <script>\#(resource(hljsJSBase64))</script>
 <script>\#(resource(mermaidJSBase64))</script>
-</head><body><article id="content" class="markdown-body"></article>
+</head><body><nav id="tabbar"></nav><article id="content" class="markdown-body"></article>
 <script>
 var darkMQ = window.matchMedia('(prefers-color-scheme: dark)');
 function __update(md) {
@@ -73,6 +129,36 @@ function __update(md) {
   }
   window.scrollTo(0, y);
 }
+function __tabs(list, active) {
+  var bar = document.getElementById('tabbar');
+  if (list.length < 2) {
+    bar.style.display = 'none';
+    document.body.classList.remove('tabs-on');
+    return;
+  }
+  bar.style.display = 'flex';
+  document.body.classList.add('tabs-on');
+  bar.innerHTML = '';
+  list.forEach(function (t, i) {
+    var el = document.createElement('div');
+    el.className = 'tab' + (i === active ? ' active' : '');
+    var label = document.createElement('span');
+    label.textContent = t.name;
+    el.appendChild(label);
+    var x = document.createElement('span');
+    x.className = 'x';
+    x.textContent = '×';
+    x.addEventListener('click', function (e) {
+      e.stopPropagation();
+      window.webkit.messageHandlers.tabs.postMessage({ action: 'close', path: t.path });
+    });
+    el.appendChild(x);
+    el.addEventListener('click', function () {
+      window.webkit.messageHandlers.tabs.postMessage({ action: 'go', path: t.path });
+    });
+    bar.appendChild(el);
+  });
+}
 darkMQ.addEventListener('change', function () {
   if (window.__lastMd !== undefined) __update(window.__lastMd);
 });
@@ -80,9 +166,7 @@ darkMQ.addEventListener('change', function () {
 </body></html>
 """#
 
-let markdownExts: Set<String> = ["md", "markdown", "mdown", "mkd"]
-
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler {
     var window: NSWindow!
     var webView: WKWebView!
     var source: DispatchSourceFileSystemObject?
@@ -91,11 +175,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     var currentFile: URL? = initialFile
     var backStack: [URL] = []
     var forwardStack: [URL] = []
+    var visited: [URL] = []
     var pendingFragment: String?
 
     var currentBaseDir: URL {
-        currentFile?.deletingLastPathComponent()
-            ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        guard let cur = currentFile else {
+            return URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        }
+        return isDir(cur) ? cur : cur.deletingLastPathComponent()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -104,6 +191,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         let config = WKWebViewConfiguration()
         config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
+        config.userContentController.add(self, name: "tabs")
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
 
@@ -129,9 +217,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
     func loadPage() {
         pageLoaded = false
-        window.title = currentFile?.lastPathComponent ?? "stdin"
-        window.subtitle = currentFile != nil
-            ? (currentBaseDir.path as NSString).abbreviatingWithTildeInPath : ""
+        if let cur = currentFile {
+            if !visited.contains(cur) { visited.append(cur) }
+            window.title = cur.lastPathComponent + (isDir(cur) ? "/" : "")
+            window.subtitle = (currentBaseDir.path as NSString).abbreviatingWithTildeInPath
+        } else {
+            window.title = "stdin"
+            window.subtitle = ""
+        }
         webView.loadHTMLString(template, baseURL: currentBaseDir)
         watch()
     }
@@ -139,6 +232,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         pageLoaded = true
         render()
+        pushTabs()
         if let frag = pendingFragment {
             pendingFragment = nil
             let js = "var t = document.getElementById(\(jsString(frag))); if (t) t.scrollIntoView();"
@@ -146,8 +240,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         }
     }
 
-    // In-page anchors stay; relative .md links navigate in-window; the rest
-    // goes to the default handler (browser, editor, Finder).
+    // In-page anchors stay; relative .md/folder links navigate in-window;
+    // the rest goes to the default handler (browser, editor, Finder).
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard navigationAction.navigationType == .linkActivated,
@@ -160,9 +254,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
                 decisionHandler(.allow)
                 return
             }
-            if markdownExts.contains(url.pathExtension.lowercased()),
-               FileManager.default.fileExists(atPath: url.path) {
-                navigate(to: url)
+            let target = URL(fileURLWithPath: url.path).standardizedFileURL
+            if isDir(target) || (markdownExts.contains(target.pathExtension.lowercased())
+                && FileManager.default.fileExists(atPath: target.path)) {
+                pendingFragment = url.fragment
+                navigate(to: resolveTarget(target))
                 decisionHandler(.cancel)
                 return
             }
@@ -174,8 +270,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     func navigate(to url: URL) {
         if let cur = currentFile { backStack.append(cur) }
         forwardStack.removeAll()
-        pendingFragment = url.fragment
         currentFile = url.standardizedFileURL
+        loadPage()
+    }
+
+    // Tab jump / tab-close switch: plain switch, optionally remembering where we were.
+    func jump(to url: URL, push: Bool) {
+        if push, let cur = currentFile, cur != url { backStack.append(cur) }
+        pendingFragment = nil
+        currentFile = url
         loadPage()
     }
 
@@ -193,6 +296,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         loadPage()
     }
 
+    // MARK: history tabs
+
+    func pushTabs() {
+        guard pageLoaded else { return }
+        let list = visited.map { ["name": $0.lastPathComponent + (isDir($0) ? "/" : ""), "path": $0.path] }
+        let active = currentFile.flatMap { visited.firstIndex(of: $0) } ?? -1
+        guard let data = try? JSONSerialization.data(withJSONObject: [list]),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView.evaluateJavaScript("__tabs(\(json)[0], \(active))", completionHandler: nil)
+    }
+
+    func userContentController(_ userContentController: WKUserContentController,
+                               didReceive message: WKScriptMessage) {
+        guard message.name == "tabs",
+              let body = message.body as? [String: Any],
+              let action = body["action"] as? String,
+              let path = body["path"] as? String else { return }
+        let url = URL(fileURLWithPath: path).standardizedFileURL
+        switch action {
+        case "go":
+            if url != currentFile { jump(to: url, push: true) }
+        case "close":
+            visited.removeAll { $0 == url }
+            backStack.removeAll { $0 == url }
+            forwardStack.removeAll { $0 == url }
+            if url == currentFile {
+                if let last = visited.last { jump(to: last, push: false) }
+            } else {
+                pushTabs()
+            }
+        default: break
+        }
+    }
+
     func jsString(_ s: String) -> String {
         let data = try! JSONSerialization.data(withJSONObject: [s])
         return String(data: data, encoding: .utf8)! + "[0]"
@@ -201,9 +338,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     @objc func render() {
         guard pageLoaded else { return }
         let md: String
-        if let file = currentFile {
-            guard let contents = try? String(contentsOf: file, encoding: .utf8) else { return }
-            md = contents
+        if let cur = currentFile {
+            if isDir(cur) {
+                md = indexMarkdown(for: cur)
+            } else if let contents = try? String(contentsOf: cur, encoding: .utf8) {
+                md = contents
+            } else { return }
         } else {
             md = stdinMD ?? ""
         }
@@ -217,6 +357,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
     // Editors save atomically (write temp + rename), which kills the watched fd —
     // re-arm on delete/rename, retrying briefly while the new file lands.
+    // Watching a directory fd fires on entry add/remove, refreshing the index.
     func watch() {
         source?.cancel()
         source = nil

@@ -20,6 +20,7 @@ The brew formula builds from source in seconds; no Gatekeeper prompts.
 ```sh
 moremark path/to/file.md &     # ALWAYS background with & so the shell isn't blocked
 some-command | moremark -      # preview stdin
+moremark docs/ &               # browse a folder (README or generated index)
 ```
 
 ## Behavior notes
