@@ -9,9 +9,10 @@
 ```sh
 moremark README.md        # native window, GitHub rendering, live reload
 moremark docs/            # browse a folder — README or a generated index
-moremark README.md &      # background it to keep your prompt
 git log | moremark -      # preview stdin
 ```
+
+The window detaches — your prompt comes right back, no `&` needed.
 
 ## Features
 
@@ -20,6 +21,7 @@ git log | moremark -      # preview stdin
 - **Mermaid** — ```` ```mermaid ```` fences render as diagrams, theme-aware
 - **Browse a repo's docs** — relative `.md` and folder links open in-window; `Cmd+[` back, `Cmd+]` forward
 - **History tabs** — visit a second doc and a slim tab strip appears with your trail; click to jump, × to forget. One doc open = no tabs, no chrome. We are not Obsidian.
+- **File tree** — `Cmd+B` toggles a slim rail of the folder's markdown files. Off by default. Still not Obsidian.
 - **Relative images** resolve against the file's directory; external links open in your browser
 - Everything vendored into a single self-contained binary — works offline, no runtime dependencies
 

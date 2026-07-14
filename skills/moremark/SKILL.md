@@ -18,16 +18,16 @@ The brew formula builds from source in seconds; no Gatekeeper prompts.
 ## Usage
 
 ```sh
-moremark path/to/file.md &     # ALWAYS background with & so the shell isn't blocked
+moremark path/to/file.md       # detaches on its own — the shell prompt returns immediately
 some-command | moremark -      # preview stdin
-moremark docs/ &               # browse a folder (README or generated index)
+moremark docs/                 # browse a folder (README or generated index)
 ```
 
 ## Behavior notes
 
 - **Live reload**: the window tracks the file. After you edit the same file again, do NOT relaunch — the open window updates itself on save.
 - Relative `.md` links and images resolve from the file's directory; the user can browse linked docs in-window (Cmd+[ / Cmd+] history).
-- Window closes with Cmd+W; the backgrounded process exits with it.
+- Window closes with Cmd+W. The process detaches from the shell automatically — never append `&`.
 
 ## When to offer
 

@@ -1,6 +1,7 @@
 // moremark — more for markdown: native macOS previewer for the CLI.
 // Usage: moremark <file.md | folder>   or   ... | moremark -
-// Live reload, in-window .md navigation (Cmd+[ / Cmd+]), history tabs, Cmd+W to close.
+// Live reload, in-window .md navigation (Cmd+[ / Cmd+]), history tabs,
+// file tree (Cmd+B), Cmd+W to close. Detaches from the shell on launch.
 
 import Cocoa
 import WebKit
@@ -51,120 +52,227 @@ func indexMarkdown(for dir: URL) -> String {
     return md
 }
 
+// Markdown-file tree for the sidebar (folders containing no markdown are pruned).
+func treeNodes(_ dir: URL, depth: Int = 0, budget: inout Int) -> [[String: Any]] {
+    guard depth < 4, budget > 0 else { return [] }
+    let items = (try? FileManager.default.contentsOfDirectory(
+        at: dir, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])) ?? []
+    var dirs: [URL] = [], files: [URL] = []
+    for item in items {
+        if isDir(item) { dirs.append(item) }
+        else if markdownExts.contains(item.pathExtension.lowercased()) { files.append(item) }
+    }
+    dirs.sort { $0.lastPathComponent.lowercased() < $1.lastPathComponent.lowercased() }
+    files.sort { $0.lastPathComponent.lowercased() < $1.lastPathComponent.lowercased() }
+    var nodes: [[String: Any]] = []
+    for d in dirs {
+        let children = treeNodes(d, depth: depth + 1, budget: &budget)
+        if !children.isEmpty {
+            nodes.append(["name": d.lastPathComponent + "/", "path": d.path, "children": children])
+        }
+    }
+    for f in files where budget > 0 {
+        budget -= 1
+        nodes.append(["name": f.lastPathComponent, "path": f.path])
+    }
+    return nodes
+}
+
 var initialFile: URL? = nil
 var stdinMD: String? = nil
 
 let cliArgs = CommandLine.arguments
-guard cliArgs.count == 2, !["-h", "--help"].contains(cliArgs[1]) else {
+guard cliArgs.count >= 2, !["-h", "--help"].contains(cliArgs[1]) else {
     die("usage: moremark <file.md | folder>   or   ... | moremark -", code: 64)
 }
-if cliArgs[1] == "-" {
+if cliArgs[1] == "--stdin-file", cliArgs.count == 3 {
+    stdinMD = (try? String(contentsOfFile: cliArgs[2], encoding: .utf8)) ?? ""
+    try? FileManager.default.removeItem(atPath: cliArgs[2])
+} else if cliArgs[1] == "-" {
     let data = FileHandle.standardInput.readDataToEndOfFile()
     stdinMD = String(data: data, encoding: .utf8) ?? ""
-} else {
+} else if cliArgs.count == 2 {
     let url = URL(fileURLWithPath: (cliArgs[1] as NSString).expandingTildeInPath).standardizedFileURL
     guard FileManager.default.fileExists(atPath: url.path) else {
         die("moremark: no such file: \(url.path)", code: 66)
     }
     initialFile = resolveTarget(url)
+} else {
+    die("usage: moremark <file.md | folder>   or   ... | moremark -", code: 64)
 }
+
+// Detach from the shell: after validating args, re-exec ourselves in the
+// background and return the user to their prompt immediately.
+if ProcessInfo.processInfo.environment["MOREMARK_FOREGROUND"] == nil {
+    let exe = Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])
+    let child = Process()
+    child.executableURL = exe
+    if let md = stdinMD {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("moremark-stdin-\(getpid()).md")
+        try? md.write(to: tmp, atomically: true, encoding: .utf8)
+        child.arguments = ["--stdin-file", tmp.path]
+    } else {
+        child.arguments = Array(CommandLine.arguments.dropFirst())
+    }
+    var env = ProcessInfo.processInfo.environment
+    env["MOREMARK_FOREGROUND"] = "1"
+    child.environment = env
+    do {
+        try child.run()
+        exit(0)
+    } catch {
+        // fall through and run in the foreground
+    }
+}
+signal(SIGHUP, SIG_IGN)
 
 func resource(_ b64: String) -> String {
     String(data: Data(base64Encoded: b64)!, encoding: .utf8)!
 }
 
-let template = #"""
-<!doctype html><html><head><meta charset="utf-8">
-<style>\#(resource(ghCSSBase64))</style>
-<style>\#(resource(hljsLightCSSBase64))</style>
-<style>@media (prefers-color-scheme: dark) { \#(resource(hljsDarkCSSBase64)) }</style>
-<style>
-body { margin: 0; background: #ffffff; }
-@media (prefers-color-scheme: dark) { body { background: #0d1117; } }
-.markdown-body { max-width: 980px; margin: 0 auto; padding: 45px; }
-@media (max-width: 767px) { .markdown-body { padding: 24px; } }
-.mermaid { display: flex; justify-content: center; margin-bottom: 16px; }
-#tabbar { display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 9;
-  gap: 2px; padding: 6px 8px 0; overflow-x: auto;
-  background: #f6f8fa; border-bottom: 1px solid #d1d9e0;
-  font: 12px -apple-system, BlinkMacSystemFont, sans-serif; }
-.tab { display: flex; align-items: center; gap: 6px; padding: 5px 10px; white-space: nowrap;
-  color: #59636e; border: 1px solid transparent; border-radius: 6px 6px 0 0; cursor: default; }
-.tab.active { background: #ffffff; color: #1f2328; border-color: #d1d9e0; border-bottom-color: #ffffff; }
-.tab .x { opacity: 0.45; cursor: pointer; padding: 0 2px; }
-.tab .x:hover { opacity: 1; }
-@media (prefers-color-scheme: dark) {
-  #tabbar { background: #161b22; border-color: #3d444d; }
-  .tab { color: #9198a1; }
-  .tab.active { background: #0d1117; color: #f0f6fc; border-color: #3d444d; border-bottom-color: #0d1117; }
-}
-body.tabs-on { padding-top: 32px; }
-</style>
-<script>\#(resource(markedJSBase64))</script>
-<script>\#(resource(hljsJSBase64))</script>
-<script>\#(resource(mermaidJSBase64))</script>
-</head><body><nav id="tabbar"></nav><article id="content" class="markdown-body"></article>
-<script>
-var darkMQ = window.matchMedia('(prefers-color-scheme: dark)');
-function __update(md) {
-  window.__lastMd = md;
-  var y = window.scrollY;
-  var el = document.getElementById('content');
-  el.innerHTML = marked.parse(md, { gfm: true });
-  el.querySelectorAll('code.language-mermaid').forEach(function (c) {
-    var d = document.createElement('div');
-    d.className = 'mermaid';
-    d.textContent = c.textContent;
-    c.parentElement.replaceWith(d);
-  });
-  el.querySelectorAll('pre code').forEach(function (c) { hljs.highlightElement(c); });
-  el.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(function (h) {
-    if (!h.id) h.id = h.textContent.trim().toLowerCase()
-      .replace(/[^\w\- ]+/g, '').replace(/\s+/g, '-');
-  });
-  var nodes = el.querySelectorAll('.mermaid');
-  if (nodes.length) {
-    mermaid.initialize({ startOnLoad: false, theme: darkMQ.matches ? 'dark' : 'default' });
-    mermaid.run({ nodes: nodes }).catch(function () {});
-  }
-  window.scrollTo(0, y);
-}
-function __tabs(list, active) {
-  var bar = document.getElementById('tabbar');
-  if (list.length < 2) {
-    bar.style.display = 'none';
-    document.body.classList.remove('tabs-on');
-    return;
-  }
-  bar.style.display = 'flex';
-  document.body.classList.add('tabs-on');
-  bar.innerHTML = '';
-  list.forEach(function (t, i) {
-    var el = document.createElement('div');
-    el.className = 'tab' + (i === active ? ' active' : '');
-    var label = document.createElement('span');
-    label.textContent = t.name;
-    el.appendChild(label);
-    var x = document.createElement('span');
-    x.className = 'x';
-    x.textContent = '×';
-    x.addEventListener('click', function (e) {
-      e.stopPropagation();
-      window.webkit.messageHandlers.tabs.postMessage({ action: 'close', path: t.path });
+func pageHTML(baseHref: String) -> String {
+    #"""
+    <!doctype html><html><head><meta charset="utf-8">
+    <base href="\#(baseHref)">
+    <style>\#(resource(ghCSSBase64))</style>
+    <style>\#(resource(hljsLightCSSBase64))</style>
+    <style>@media (prefers-color-scheme: dark) { \#(resource(hljsDarkCSSBase64)) }</style>
+    <style>
+    body { margin: 0; background: #ffffff; }
+    @media (prefers-color-scheme: dark) { body { background: #0d1117; } }
+    .markdown-body { max-width: 980px; margin: 0 auto; padding: 45px; }
+    @media (max-width: 767px) { .markdown-body { padding: 24px; } }
+    .mermaid { display: flex; justify-content: center; margin-bottom: 16px; }
+    #tabbar { display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 9;
+      gap: 2px; padding: 6px 8px 0; overflow-x: auto;
+      background: #f6f8fa; border-bottom: 1px solid #d1d9e0;
+      font: 12px -apple-system, BlinkMacSystemFont, sans-serif; }
+    .tab { display: flex; align-items: center; gap: 6px; padding: 5px 10px; white-space: nowrap;
+      color: #59636e; border: 1px solid transparent; border-radius: 6px 6px 0 0; cursor: default; }
+    .tab.active { background: #ffffff; color: #1f2328; border-color: #d1d9e0; border-bottom-color: #ffffff; }
+    .tab .x { opacity: 0.45; cursor: pointer; padding: 0 2px; }
+    .tab .x:hover { opacity: 1; }
+    #sidebar { display: none; position: fixed; top: 0; bottom: 0; left: 0; width: 220px; z-index: 8;
+      overflow-y: auto; padding: 12px 8px; box-sizing: border-box;
+      background: #f6f8fa; border-right: 1px solid #d1d9e0;
+      font: 12px -apple-system, BlinkMacSystemFont, sans-serif; }
+    .ti { padding: 3px 8px; border-radius: 6px; color: #59636e; cursor: default;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ti:hover { background: rgba(0,0,0,0.05); }
+    .ti.active { background: #ddf4ff; color: #0969da; }
+    .ti.dir { font-weight: 600; }
+    .tc { padding-left: 12px; }
+    body.tabs-on #sidebar { top: 32px; }
+    @media (prefers-color-scheme: dark) {
+      #tabbar { background: #161b22; border-color: #3d444d; }
+      .tab { color: #9198a1; }
+      .tab.active { background: #0d1117; color: #f0f6fc; border-color: #3d444d; border-bottom-color: #0d1117; }
+      #sidebar { background: #161b22; border-color: #3d444d; }
+      .ti { color: #9198a1; }
+      .ti:hover { background: rgba(255,255,255,0.06); }
+      .ti.active { background: #121d2f; color: #4493f8; }
+    }
+    body.tabs-on { padding-top: 32px; }
+    body.side-on { padding-left: 220px; }
+    </style>
+    <script>\#(resource(markedJSBase64))</script>
+    <script>\#(resource(hljsJSBase64))</script>
+    <script>\#(resource(mermaidJSBase64))</script>
+    </head><body><nav id="tabbar"></nav><nav id="sidebar"></nav>
+    <article id="content" class="markdown-body"></article>
+    <script>
+    var darkMQ = window.matchMedia('(prefers-color-scheme: dark)');
+    function __update(md) {
+      window.__lastMd = md;
+      var y = window.scrollY;
+      var el = document.getElementById('content');
+      el.innerHTML = marked.parse(md, { gfm: true });
+      el.querySelectorAll('code.language-mermaid').forEach(function (c) {
+        var d = document.createElement('div');
+        d.className = 'mermaid';
+        d.textContent = c.textContent;
+        c.parentElement.replaceWith(d);
+      });
+      el.querySelectorAll('pre code').forEach(function (c) { hljs.highlightElement(c); });
+      el.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(function (h) {
+        if (!h.id) h.id = h.textContent.trim().toLowerCase()
+          .replace(/[^\w\- ]+/g, '').replace(/\s+/g, '-');
+      });
+      var nodes = el.querySelectorAll('.mermaid');
+      if (nodes.length) {
+        mermaid.initialize({ startOnLoad: false, theme: darkMQ.matches ? 'dark' : 'default' });
+        mermaid.run({ nodes: nodes }).catch(function () {});
+      }
+      window.scrollTo(0, y);
+    }
+    function __tabs(list, active) {
+      var bar = document.getElementById('tabbar');
+      if (list.length < 2) {
+        bar.style.display = 'none';
+        document.body.classList.remove('tabs-on');
+        return;
+      }
+      bar.style.display = 'flex';
+      document.body.classList.add('tabs-on');
+      bar.innerHTML = '';
+      list.forEach(function (t, i) {
+        var el = document.createElement('div');
+        el.className = 'tab' + (i === active ? ' active' : '');
+        var label = document.createElement('span');
+        label.textContent = t.name;
+        el.appendChild(label);
+        var x = document.createElement('span');
+        x.className = 'x';
+        x.textContent = '×';
+        x.addEventListener('click', function (e) {
+          e.stopPropagation();
+          window.webkit.messageHandlers.tabs.postMessage({ action: 'close', path: t.path });
+        });
+        el.appendChild(x);
+        el.addEventListener('click', function () {
+          window.webkit.messageHandlers.tabs.postMessage({ action: 'go', path: t.path });
+        });
+        bar.appendChild(el);
+      });
+    }
+    function __tree(nodes, active, show) {
+      var side = document.getElementById('sidebar');
+      if (!show || !nodes.length) {
+        side.style.display = 'none';
+        document.body.classList.remove('side-on');
+        return;
+      }
+      side.style.display = 'block';
+      document.body.classList.add('side-on');
+      side.innerHTML = '';
+      function build(list, container) {
+        list.forEach(function (n) {
+          var el = document.createElement('div');
+          el.className = 'ti' + (n.children ? ' dir' : '') + (n.path === active ? ' active' : '');
+          el.textContent = n.name;
+          el.title = n.name;
+          el.addEventListener('click', function () {
+            window.webkit.messageHandlers.tabs.postMessage({ action: 'go', path: n.path });
+          });
+          container.appendChild(el);
+          if (n.children) {
+            var kids = document.createElement('div');
+            kids.className = 'tc';
+            build(n.children, kids);
+            container.appendChild(kids);
+          }
+        });
+      }
+      build(nodes, side);
+    }
+    darkMQ.addEventListener('change', function () {
+      if (window.__lastMd !== undefined) __update(window.__lastMd);
     });
-    el.appendChild(x);
-    el.addEventListener('click', function () {
-      window.webkit.messageHandlers.tabs.postMessage({ action: 'go', path: t.path });
-    });
-    bar.appendChild(el);
-  });
+    </script>
+    </body></html>
+    """#
 }
-darkMQ.addEventListener('change', function () {
-  if (window.__lastMd !== undefined) __update(window.__lastMd);
-});
-</script>
-</body></html>
-"""#
 
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKScriptMessageHandler {
     var window: NSWindow!
@@ -177,6 +285,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     var forwardStack: [URL] = []
     var visited: [URL] = []
     var pendingFragment: String?
+    var pageCounter = 0
+    var currentPageFile: URL?
+
+    // Sidebar root stays anchored to where moremark was opened.
+    let treeRoot: URL? = initialFile.map { isDir($0) ? $0 : $0.deletingLastPathComponent() }
 
     var currentBaseDir: URL {
         guard let cur = currentFile else {
@@ -189,8 +302,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         applyAppearance(UserDefaults.standard.string(forKey: "appearance") ?? "system")
 
         let config = WKWebViewConfiguration()
-        config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
-        config.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
         config.userContentController.add(self, name: "tabs")
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
@@ -225,7 +336,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             window.title = "stdin"
             window.subtitle = ""
         }
-        webView.loadHTMLString(template, baseURL: currentBaseDir)
+        // loadHTMLString(baseURL:) can't read local subresources (images);
+        // write the page to a temp file and grant read access instead.
+        let baseHref = URL(fileURLWithPath: currentBaseDir.path, isDirectory: true).absoluteString
+        pageCounter += 1
+        let pageFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("moremark-\(getpid())-\(pageCounter).html")
+        if let old = currentPageFile { try? FileManager.default.removeItem(at: old) }
+        currentPageFile = pageFile
+        try? pageHTML(baseHref: baseHref).write(to: pageFile, atomically: true, encoding: .utf8)
+        webView.loadFileURL(pageFile, allowingReadAccessTo: URL(fileURLWithPath: "/"))
         watch()
     }
 
@@ -233,14 +353,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         pageLoaded = true
         render()
         pushTabs()
+        pushTree()
         if let frag = pendingFragment {
             pendingFragment = nil
-            let js = "var t = document.getElementById(\(jsString(frag))); if (t) t.scrollIntoView();"
-            webView.evaluateJavaScript(js, completionHandler: nil)
+            scrollTo(fragment: frag)
         }
     }
 
-    // In-page anchors stay; relative .md/folder links navigate in-window;
+    func scrollTo(fragment: String) {
+        let js = "var t = document.getElementById(\(jsString(fragment))); if (t) t.scrollIntoView();"
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    // In-page anchors scroll; relative .md/folder links navigate in-window;
     // the rest goes to the default handler (browser, editor, Finder).
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
@@ -250,8 +375,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             return
         }
         if url.scheme == "file" {
-            if url.fragment != nil, url.path == currentBaseDir.path {
-                decisionHandler(.allow)
+            // Fragment-only links resolve against <base>, i.e. the doc's dir.
+            if let frag = url.fragment,
+               url.path == currentBaseDir.path || url.path == currentPageFile?.path {
+                scrollTo(fragment: frag)
+                decisionHandler(.cancel)
                 return
             }
             let target = URL(fileURLWithPath: url.path).standardizedFileURL
@@ -296,7 +424,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         loadPage()
     }
 
-    // MARK: history tabs
+    // MARK: history tabs + file tree
 
     func pushTabs() {
         guard pageLoaded else { return }
@@ -307,13 +435,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         webView.evaluateJavaScript("__tabs(\(json)[0], \(active))", completionHandler: nil)
     }
 
+    func pushTree() {
+        guard pageLoaded else { return }
+        let show = UserDefaults.standard.bool(forKey: "sidebar")
+        var nodes: [[String: Any]] = []
+        if show, let root = treeRoot {
+            var budget = 500
+            nodes = treeNodes(root, budget: &budget)
+        }
+        let active = currentFile?.path ?? ""
+        guard let data = try? JSONSerialization.data(withJSONObject: [nodes]),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView.evaluateJavaScript(
+            "__tree(\(json)[0], \(jsString(active)), \(show))", completionHandler: nil)
+    }
+
+    @objc func toggleFileTree() {
+        let show = !UserDefaults.standard.bool(forKey: "sidebar")
+        UserDefaults.standard.set(show, forKey: "sidebar")
+        pushTree()
+    }
+
     func userContentController(_ userContentController: WKUserContentController,
                                didReceive message: WKScriptMessage) {
         guard message.name == "tabs",
               let body = message.body as? [String: Any],
               let action = body["action"] as? String,
               let path = body["path"] as? String else { return }
-        let url = URL(fileURLWithPath: path).standardizedFileURL
+        let url = resolveTarget(URL(fileURLWithPath: path).standardizedFileURL)
         switch action {
         case "go":
             if url != currentFile { jump(to: url, push: true) }
@@ -380,7 +529,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         source = src
     }
 
-    // MARK: appearance
+    // MARK: about + appearance
+
+    @objc func showAbout() {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+        let credits = NSMutableAttributedString(
+            string: "more for markdown — the one that opens a window.\n\n",
+            attributes: [.font: NSFont.systemFont(ofSize: 11)])
+        credits.append(NSAttributedString(
+            string: "github.com/jasonmimick/moremark",
+            attributes: [.link: URL(string: "https://github.com/jasonmimick/moremark")!,
+                         .font: NSFont.systemFont(ofSize: 11)]))
+        credits.append(NSAttributedString(
+            string: "\nMIT © Jason Mimick",
+            attributes: [.font: NSFont.systemFont(ofSize: 11)]))
+        NSApp.orderFrontStandardAboutPanel(options: [
+            .applicationName: "moremark",
+            .applicationVersion: version,
+            .version: "",
+            .credits: credits,
+        ])
+        NSApp.activate(ignoringOtherApps: true)
+    }
 
     func applyAppearance(_ mode: String) {
         switch mode {
@@ -401,6 +571,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         case #selector(appearanceSystem): item.state = mode == "system" ? .on : .off
         case #selector(appearanceLight): item.state = mode == "light" ? .on : .off
         case #selector(appearanceDark): item.state = mode == "dark" ? .on : .off
+        case #selector(toggleFileTree):
+            item.state = UserDefaults.standard.bool(forKey: "sidebar") ? .on : .off
+            return treeRoot != nil
         case #selector(goBack): return !backStack.isEmpty
         case #selector(goForward): return !forwardStack.isEmpty
         default: break
@@ -409,6 +582,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if let page = currentPageFile { try? FileManager.default.removeItem(at: page) }
+    }
 }
 
 let app = NSApplication.shared
@@ -417,6 +594,8 @@ app.setActivationPolicy(.regular)
 let mainMenu = NSMenu()
 let appMenuItem = NSMenuItem(); mainMenu.addItem(appMenuItem)
 let appMenu = NSMenu()
+appMenu.addItem(withTitle: "About moremark", action: #selector(AppDelegate.showAbout), keyEquivalent: "")
+appMenu.addItem(NSMenuItem.separator())
 appMenu.addItem(withTitle: "Hide moremark", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
 appMenu.addItem(NSMenuItem.separator())
 appMenu.addItem(withTitle: "Quit moremark", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -435,6 +614,7 @@ editMenuItem.submenu = editMenu
 
 let viewMenuItem = NSMenuItem(); mainMenu.addItem(viewMenuItem)
 let viewMenu = NSMenu(title: "View")
+viewMenu.addItem(NSMenuItem(title: "Toggle File Tree", action: #selector(AppDelegate.toggleFileTree), keyEquivalent: "b"))
 viewMenu.addItem(withTitle: "Reload", action: #selector(AppDelegate.render), keyEquivalent: "r")
 viewMenu.addItem(NSMenuItem.separator())
 viewMenu.addItem(NSMenuItem(title: "System Appearance", action: #selector(AppDelegate.appearanceSystem), keyEquivalent: ""))

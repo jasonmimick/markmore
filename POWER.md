@@ -21,7 +21,7 @@ keywords: [markdown, preview, viewer, macos, mermaid, documentation]
 ## Usage
 
 ```sh
-moremark path/to/file.md &     # always background with & to keep the shell free
+moremark path/to/file.md       # detaches on its own — the prompt returns immediately
 some-command | moremark -      # preview stdin
 ```
 
