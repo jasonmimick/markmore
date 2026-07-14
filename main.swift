@@ -448,19 +448,28 @@ func pageHTML(baseHref: String) -> String {
     """#
 }
 
-// WKWebView eats Cmd+[ / Cmd+] for its own page history — hand them back
-// to the main menu so our Back/Forward (with proper state) run instead.
+// WKWebView eats Cmd+[ / Cmd+] for its own page history — intercept them
+// and fire our Back/Forward actions directly instead.
 final class PreviewWebView: WKWebView {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.modifierFlags.contains(.command),
-           let chars = event.charactersIgnoringModifiers, ["[", "]"].contains(chars) {
-            return false
+           let chars = event.charactersIgnoringModifiers {
+            if chars == "[" {
+                NSApp.sendAction(#selector(AppDelegate.goBack), to: nil, from: self)
+                return true
+            }
+            if chars == "]" {
+                NSApp.sendAction(#selector(AppDelegate.goForward), to: nil, from: self)
+                return true
+            }
         }
         return super.performKeyEquivalent(with: event)
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation,
+let recentsMenu = NSMenu(title: "Open Recent")
+
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDelegate,
                          WKNavigationDelegate, WKScriptMessageHandler {
     var window: NSWindow!
     var webView: WKWebView!
@@ -517,6 +526,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation,
         let stack = NSStackView(views: [backButton, forwardButton])
         stack.spacing = 2
         stack.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 4)
+        // Titlebar accessories are invisible without an explicit frame.
+        stack.layoutSubtreeIfNeeded()
+        stack.setFrameSize(stack.fittingSize)
         let accessory = NSTitlebarAccessoryViewController()
         accessory.view = stack
         accessory.layoutAttribute = .leading
@@ -535,10 +547,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation,
         loadPage()
     }
 
+    func noteRecent(_ url: URL) {
+        guard !url.path.hasPrefix(FileManager.default.temporaryDirectory.path) else { return }
+        var recents = UserDefaults.standard.stringArray(forKey: "recents") ?? []
+        recents.removeAll { $0 == url.path }
+        recents.insert(url.path, at: 0)
+        UserDefaults.standard.set(Array(recents.prefix(15)), forKey: "recents")
+        NSDocumentController.shared.noteNewRecentDocumentURL(url)
+    }
+
     func loadPage() {
         pageLoaded = false
         if let cur = currentFile {
             if !visited.contains(cur) { visited.append(cur) }
+            noteRecent(cur)
             window.title = cur.lastPathComponent + (isDir(cur) ? "/" : "")
             window.subtitle = (currentBaseDir.path as NSString).abbreviatingWithTildeInPath
         } else {
@@ -576,6 +598,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation,
 
     @objc func showWelcome() {
         webView.evaluateJavaScript("__welcome(true)", completionHandler: nil)
+    }
+
+    @objc func openRecent(_ sender: NSMenuItem) {
+        guard let path = sender.representedObject as? String else { return }
+        let url = resolveTarget(URL(fileURLWithPath: path).standardizedFileURL)
+        if url != currentFile { jump(to: url, push: true) }
+    }
+
+    @objc func clearRecents() {
+        UserDefaults.standard.removeObject(forKey: "recents")
+        NSDocumentController.shared.clearRecentDocuments(nil)
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === recentsMenu else { return }
+        menu.removeAllItems()
+        let recents = (UserDefaults.standard.stringArray(forKey: "recents") ?? [])
+            .filter { FileManager.default.fileExists(atPath: $0) }
+        for path in recents {
+            let url = URL(fileURLWithPath: path)
+            let title = (path as NSString).abbreviatingWithTildeInPath + (isDir(url) ? "/" : "")
+            let item = NSMenuItem(title: title, action: #selector(openRecent(_:)), keyEquivalent: "")
+            item.representedObject = path
+            menu.addItem(item)
+        }
+        if recents.isEmpty {
+            let empty = NSMenuItem(title: "No Recent Files", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            menu.addItem(empty)
+        }
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "Clear Menu", action: #selector(clearRecents), keyEquivalent: ""))
     }
 
     @objc func showHelp() {
@@ -887,6 +941,10 @@ appMenuItem.submenu = appMenu
 
 let fileMenuItem = NSMenuItem(); mainMenu.addItem(fileMenuItem)
 let fileMenu = NSMenu(title: "File")
+let recentsItem = NSMenuItem(title: "Open Recent", action: nil, keyEquivalent: "")
+recentsItem.submenu = recentsMenu
+fileMenu.addItem(recentsItem)
+fileMenu.addItem(.separator())
 fileMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
 fileMenuItem.submenu = fileMenu
 
@@ -921,5 +979,6 @@ app.helpMenu = helpMenu
 
 app.mainMenu = mainMenu
 let delegate = AppDelegate()
+recentsMenu.delegate = delegate
 app.delegate = delegate
 app.run()
