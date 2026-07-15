@@ -19,15 +19,16 @@ The window detaches — your prompt comes right back, no `&` needed.
 
 - **Live reload** — re-renders on save (handles editors' atomic saves), keeps your scroll position
 - **Real GitHub rendering** — [github-markdown-css](https://github.com/sindresorhus/github-markdown-css) + [highlight.js](https://highlightjs.org) GitHub themes; follows system light/dark with a View-menu override
+- **Math** — `$inline$` and `$$display$$` typeset with [KaTeX](https://katex.org), fully offline. Try [samples/math.md](samples/math.md).
+- **Typography that cares** — View ▸ Typography presets (Book, Classic, Mono) or the native font panel (`⌘T`); hyphenation, ligatures, and `⌘P` prints a properly typeset PDF
 - **Mermaid** — ```` ```mermaid ```` fences render as diagrams, theme-aware
-- **Browse a repo's docs** — relative `.md` and folder links open in-window; `Cmd+[` back, `Cmd+]` forward
-- **History tabs** — visit a second doc and a slim tab strip appears with your trail; click to jump, × to forget. One doc open = no tabs, no chrome. We are not Obsidian.
-- **File tree** — `Cmd+B` toggles a slim rail of *all* the folder's files. Off by default. Still not Obsidian.
-- **Opens anything** — source files render syntax-highlighted, images render as images, and binaries get a classic `hexdump -C` view. `Cmd+Shift+H` forces hex on any file, for the old unix souls checking bytes. Try it on [samples/magic.bin](samples/magic.bin).
-- **Relative images** resolve against the file's directory; external links open in your browser
+- **Browse a repo's docs** — relative `.md` and folder links open in-window; `⌘[` back, `⌘]` forward; history tabs appear at your second doc; `⌘⇧T` floats a table of contents
+- **Native file tree** — `⌘B`: real disclosure triangles, Finder icons, live-refreshes as files change, root folder on top. Off by default. We are not Obsidian — nothing is ever written into your folders.
+- **Opens anything** — source files render syntax-highlighted, images render as images, and binaries get a classic `hexdump -C` view (`⌘⇧H` forces hex on any file). Try it on [samples/magic.bin](samples/magic.bin).
+- **Find** (`⌘F`), **zoom** (`⌘=`/`⌘-`), word count + reading time in the titlebar, YAML front matter as a tidy collapsible block
 - Everything vendored into a single self-contained binary — works offline, no runtime dependencies
 
-`Cmd+W` close · `Cmd+Q` quit · `Cmd+R` reload
+`⌘W` close · `⌘Q` quit · `⌘R` reload · `⌘?` full reference in-app
 
 ## Install
 

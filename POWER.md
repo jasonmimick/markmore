@@ -28,3 +28,4 @@ some-command | markmore -      # preview stdin
 - The window live-reloads on save — don't relaunch after editing the same file.
 - Offer a preview after writing or substantially editing README/docs/reports.
 - Relative .md links browse in-window (Cmd+[ / Cmd+] history); images resolve from the file's directory.
+- KaTeX math ($...$/$$...$$), mermaid, file tree (Cmd+B), TOC (Cmd+Shift+T), find (Cmd+F), print/PDF (Cmd+P).

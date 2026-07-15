@@ -117,10 +117,13 @@ usage:
   ... | markmore             preview stdin
 
 in the window:
-  ⌘B      toggle file tree           ⌘[  back
-  ⌘⇧H     hex dump (any file)        ⌘]  forward
-  ⌘R      reload                     ⌘W  close
-  ⌘?      this help                  ⌘Q  quit
+  ⌘B      file tree                  ⌘[ / ⌘]   back / forward
+  ⌘⇧T     table of contents          ⌘F        find in page
+  ⌘⇧H     hex dump (any file)        ⌘= / ⌘-   zoom (⌘0 reset)
+  ⌘T      choose font                ⌘P        print / save PDF
+  ⌘R      reload                     ⌘W  close   ⌘Q  quit   ⌘?  help
+
+Math: $inline$ and $$display$$ typeset with KaTeX, offline.
 
 Relative links and folders open in-window; visit a second doc and history
 tabs appear. External links open in your browser. Your prompt returns
@@ -150,12 +153,20 @@ Your prompt returns immediately — the window detaches from the shell.
 
 | keys | action |
 |---|---|
-| `⌘B` | toggle the file tree |
+| `⌘B` | file tree (native, live-refreshing; root folder shown on top) |
+| `⌘⇧T` | table of contents — floating outline of the doc's headings |
+| `⌘F` | find in page (Enter next, ⇧Enter previous, Esc closes) |
+| `⌘=` / `⌘-` / `⌘0` | zoom in / out / reset |
+| `⌘T` | font panel · **View ▸ Typography** for presets (Book is the serif one) |
 | `⌘⇧H` | hex dump the current file (any file — old unix souls welcome) |
 | `⌘[` / `⌘]` | back / forward (also the ‹ › titlebar buttons) |
-| `⌘R` | re-render |
-| `⌘W` | close window · `⌘Q` quit |
-| `⌘?` | this page |
+| `⌘P` | print — i.e. save a beautifully typeset PDF |
+| `⌘⇧R` / `⌥⌘C` / `⌘E` | reveal in Finder / copy path / open in editor |
+| `⌘R` | re-render · `⌘W` close · `⌘Q` quit · `⌘?` this page |
+
+## Math
+
+`$e^{i\\pi}+1=0$` and `$$…$$` blocks typeset with KaTeX — fully offline, fonts embedded. YAML front matter renders as a tidy collapsible block instead of raw dashes.
 
 ## Behavior
 
@@ -268,6 +279,24 @@ func pageHTML(baseHref: String) -> String {
       #findbar { background: #161b22; border-color: #3d444d; color: #f0f6fc; }
       #findcount { color: #9198a1; }
     }
+    #toc { display: none; position: fixed; top: 60px; right: 14px; z-index: 7;
+      max-width: 240px; max-height: 70vh; overflow-y: auto; padding: 10px 6px;
+      border-radius: 10px; background: rgba(246, 248, 250, 0.92); border: 1px solid #d1d9e0;
+      font: 12px -apple-system, BlinkMacSystemFont, sans-serif; backdrop-filter: blur(8px); }
+    #toc a { display: block; padding: 3px 10px; border-radius: 5px; color: #59636e;
+      cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #toc a:hover { background: rgba(0,0,0,0.06); color: #1f2328; text-decoration: none; }
+    #toc a.toc-h2 { padding-left: 22px; }
+    #toc a.toc-h3 { padding-left: 34px; }
+    .frontmatter { margin-bottom: 16px; font-size: 13px; color: #59636e; }
+    .frontmatter summary { cursor: pointer; }
+    .frontmatter pre { margin-top: 6px; }
+    @media (prefers-color-scheme: dark) {
+      #toc { background: rgba(22, 27, 34, 0.92); border-color: #3d444d; }
+      #toc a { color: #9198a1; }
+      #toc a:hover { background: rgba(255,255,255,0.07); color: #f0f6fc; }
+      .frontmatter { color: #9198a1; }
+    }
     #welcome { display: none; position: fixed; inset: 0; z-index: 20; align-items: center;
       justify-content: center; background: rgba(15, 23, 30, 0.35); backdrop-filter: blur(6px); }
     .wcard { position: relative; overflow: hidden; width: min(440px, 86vw); text-align: center;
@@ -323,6 +352,7 @@ func pageHTML(baseHref: String) -> String {
     </head><body><nav id="tabbar"></nav>
     <div id="findbar"><input id="findinput" placeholder="Find…" spellcheck="false">
       <span id="findcount"></span></div>
+    <nav id="toc"><div id="toclist"></div></nav>
     <article id="content" class="markdown-body"></article>
     <div id="welcome"><div class="wcard">
       <div class="wlogo">M↓</div>
@@ -345,7 +375,21 @@ func pageHTML(baseHref: String) -> String {
       window.__lastMd = md;
       var y = window.scrollY;
       var el = document.getElementById('content');
+      var fm = null;
+      var fmMatch = md.match(/^---\n([\s\S]*?)\n---\n?/);
+      if (fmMatch) { fm = fmMatch[1]; md = md.slice(fmMatch[0].length); }
       el.innerHTML = marked.parse(md, { gfm: true });
+      if (fm !== null) {
+        var det = document.createElement('details');
+        det.className = 'frontmatter';
+        var sum = document.createElement('summary');
+        sum.textContent = 'front matter';
+        var pre = document.createElement('pre');
+        pre.textContent = fm;
+        det.appendChild(sum);
+        det.appendChild(pre);
+        el.insertBefore(det, el.firstChild);
+      }
       el.querySelectorAll('code.language-mermaid').forEach(function (c) {
         var d = document.createElement('div');
         d.className = 'mermaid';
@@ -375,6 +419,23 @@ func pageHTML(baseHref: String) -> String {
         });
       } catch (e) {}
       window.scrollTo(0, y);
+      __buildToc();
+    }
+    function __buildToc() {
+      var toc = document.getElementById('toc');
+      var list = document.getElementById('toclist');
+      list.innerHTML = '';
+      document.querySelectorAll('#content h1, #content h2, #content h3').forEach(function (h) {
+        var a = document.createElement('a');
+        a.textContent = h.textContent;
+        a.className = 'toc-' + h.tagName.toLowerCase();
+        a.addEventListener('click', function () { h.scrollIntoView({ behavior: 'smooth' }); });
+        list.appendChild(a);
+      });
+    }
+    function __toc(show) {
+      document.getElementById('toc').style.display =
+        show && document.getElementById('toclist').children.length ? 'block' : 'none';
     }
     function __tabs(list, active) {
       var bar = document.getElementById('tabbar');
@@ -656,6 +717,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         applyTypography()
         render()
         pushTabs()
+        if tocVisible { webView.evaluateJavaScript("__toc(true)", completionHandler: nil) }
         if let frag = pendingFragment {
             pendingFragment = nil
             scrollTo(fragment: frag)
@@ -719,6 +781,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
 
     @objc func findInPage() {
         webView.evaluateJavaScript("__find(true)", completionHandler: nil)
+    }
+
+    var tocVisible = false
+
+    @objc func toggleToc() {
+        tocVisible.toggle()
+        webView.evaluateJavaScript("__toc(\(tocVisible))", completionHandler: nil)
     }
 
     @objc func printDocument() {
@@ -1224,6 +1293,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         case #selector(toggleHex):
             item.state = hexMode ? .on : .off
             return currentFile.map { !isDir($0) } ?? (stdinMD != nil)
+        case #selector(toggleToc):
+            item.state = tocVisible ? .on : .off
         case #selector(presetSystem), #selector(presetBook),
              #selector(presetClassic), #selector(presetMono):
             let preset = UserDefaults.standard.string(forKey: "typoPreset") ?? "system"
@@ -1286,6 +1357,7 @@ editMenuItem.submenu = editMenu
 let viewMenuItem = NSMenuItem(); mainMenu.addItem(viewMenuItem)
 let viewMenu = NSMenu(title: "View")
 viewMenu.addItem(NSMenuItem(title: "Toggle File Tree", action: #selector(AppDelegate.toggleFileTree), keyEquivalent: "b"))
+viewMenu.addItem(NSMenuItem(title: "Table of Contents", action: #selector(AppDelegate.toggleToc), keyEquivalent: "T"))
 viewMenu.addItem(NSMenuItem(title: "Hex Dump", action: #selector(AppDelegate.toggleHex), keyEquivalent: "H"))
 viewMenu.addItem(withTitle: "Reload", action: #selector(AppDelegate.render), keyEquivalent: "r")
 viewMenu.addItem(NSMenuItem.separator())

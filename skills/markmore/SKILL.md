@@ -29,6 +29,8 @@ markmore docs/                 # browse a folder (README or generated index)
 - **Live reload**: the window tracks the file. After you edit the same file again, do NOT relaunch — the open window updates itself on save.
 - Relative links and images resolve from the file's directory; linked docs browse in-window (Cmd+[ / Cmd+] history).
 - Non-markdown files work too: source renders syntax-highlighted, images render, binaries hex-dump (Cmd+Shift+H forces hex).
+- Math: $inline$ and $$display$$ typeset with KaTeX, offline. YAML front matter renders as a collapsible block.
+- Cmd+B native file tree, Cmd+Shift+T table of contents, Cmd+F find, Cmd+P print/PDF.
 - Window closes with Cmd+W. The process detaches from the shell automatically — never append `&`.
 
 ## When to offer
