@@ -1,16 +1,16 @@
-<p align="center"><img src="icon.svg" width="128" alt="moremark icon"></p>
+<p align="center"><img src="icon.svg" width="128" alt="markmore icon"></p>
 
-# moremark
+# markmore
 
-**`more` for markdown — the one that opens a window.**
+**Markdown, beautifully rendered — straight from your terminal.**
 
-`cat` dumps it, `more` pages it, `glow` styles it in the terminal. `moremark` renders your markdown the way it's meant to look — GitHub styling, syntax-highlighted code, mermaid diagrams — in a native macOS window, straight from the CLI. One Swift file. No Electron. ~5MB.
+`markmore README.md` opens a native macOS window with your markdown the way it's meant to look — GitHub styling, syntax-highlighted code, mermaid diagrams, live reload. One Swift file. No Electron. ~5MB.
 
 ```sh
-moremark                  # right here — opens ./README.md, or a folder index
-moremark README.md        # native window, GitHub rendering, live reload
-moremark docs/            # browse a folder
-git log | moremark        # preview stdin
+markmore                  # right here — opens ./README.md, or a folder index
+markmore README.md        # native window, GitHub rendering, live reload
+markmore docs/            # browse a folder
+git log | markmore        # preview stdin
 ```
 
 The window detaches — your prompt comes right back, no `&` needed.
@@ -32,7 +32,7 @@ The window detaches — your prompt comes right back, no `&` needed.
 ## Install
 
 ```sh
-brew install jasonmimick/moremark/moremark
+brew install jasonmimick/markmore/markmore
 ```
 
 Builds from source on your Mac with `swiftc` (ships with Xcode Command Line Tools) — no Gatekeeper warnings, nothing unsigned downloaded.
@@ -40,20 +40,20 @@ Builds from source on your Mac with `swiftc` (ships with Xcode Command Line Tool
 Or from a clone:
 
 ```sh
-./build.sh   # installs moremark.app to ~/Applications + wrapper to ~/.local/bin
+./build.sh   # installs markmore.app to ~/Applications + wrapper to ~/.local/bin
 ```
 
 ## Using an AI coding agent?
 
-moremark ships as a skill for the major agent CLIs — your agent learns to offer rendered previews of the markdown it writes:
+markmore ships as a skill for the major agent CLIs — your agent learns to offer rendered previews of the markdown it writes:
 
-- **Claude Code**: `/plugin marketplace add jasonmimick/moremark` then `/plugin install moremark@moremark`
-- **Codex CLI** (and other `.agents/skills` agents): the skill is bundled in this repo at `.agents/skills/moremark/`
+- **Claude Code**: `/plugin marketplace add jasonmimick/markmore` then `/plugin install markmore@markmore`
+- **Codex CLI** (and other `.agents/skills` agents): the skill is bundled in this repo at `.agents/skills/markmore/`
 - **Kiro**: add this repo as a Power (`POWER.md` included)
 
 ## Why
 
-Every markdown previewer is either $14, an Electron app, a terminal approximation, or trapped inside an editor. This is the missing member of the `cat`/`more`/`less` family: type a command, see the document, hit `Cmd+W`, back to work.
+Every markdown previewer is either $14, an Electron app, a terminal approximation, or trapped inside an editor. This one is a command: type it, see the document, hit `Cmd+W`, back to work.
 
 ## Credits
 

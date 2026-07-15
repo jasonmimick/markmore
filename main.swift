@@ -1,5 +1,5 @@
-// moremark — more for markdown: native macOS previewer for the CLI.
-// Usage: moremark <file.md | folder>   or   ... | moremark -
+// markmore — more for markdown: native macOS previewer for the CLI.
+// Usage: markmore <file.md | folder>   or   ... | markmore -
 // Live reload, in-window .md navigation (Cmd+[ / Cmd+]), history tabs,
 // file tree (Cmd+B), Cmd+W to close. Detaches from the shell on launch.
 
@@ -99,14 +99,14 @@ var initialFile: URL? = nil
 var stdinMD: String? = nil
 
 let cliHelp = """
-moremark — more for markdown: the one that opens a window.
+markmore — more for markdown: the one that opens a window.
 
 usage:
-  moremark                   open the current folder (README.md if present)
-  moremark <file.md>         preview a markdown file (live-reloads on save)
-  moremark <folder>          browse a folder — README or a generated index
-  moremark <any file>        source renders highlighted; binaries hex-dump
-  ... | moremark             preview stdin
+  markmore                   open the current folder (README.md if present)
+  markmore <file.md>         preview a markdown file (live-reloads on save)
+  markmore <folder>          browse a folder — README or a generated index
+  markmore <any file>        source renders highlighted; binaries hex-dump
+  ... | markmore             preview stdin
 
 in the window:
   ⌘B      toggle file tree           ⌘[  back
@@ -118,11 +118,11 @@ Relative links and folders open in-window; visit a second doc and history
 tabs appear. External links open in your browser. Your prompt returns
 immediately — the window detaches from the shell.
 
-docs: https://github.com/jasonmimick/moremark
+docs: https://github.com/jasonmimick/markmore
 """
 
 let helpMarkdown = """
-# moremark help
+# markmore help
 
 `more` for markdown — the one that opens a window.
 
@@ -130,11 +130,11 @@ let helpMarkdown = """
 
 | command | does |
 |---|---|
-| `moremark` | open the current folder — `README.md` if present, else an index |
-| `moremark file.md` | preview a markdown file, live-reloading on save |
-| `moremark folder/` | browse a folder |
-| `moremark any.file` | source renders syntax-highlighted; binaries hex-dump |
-| `... \\| moremark` | preview stdin (piped input is auto-detected) |
+| `markmore` | open the current folder — `README.md` if present, else an index |
+| `markmore file.md` | preview a markdown file, live-reloading on save |
+| `markmore folder/` | browse a folder |
+| `markmore any.file` | source renders syntax-highlighted; binaries hex-dump |
+| `... \\| markmore` | preview stdin (piped input is auto-detected) |
 
 Your prompt returns immediately — the window detaches from the shell.
 
@@ -155,14 +155,14 @@ Your prompt returns immediately — the window detaches from the shell.
 - **Links** — relative markdown/folder links open in-window; anchors scroll; external links open in your browser. Images resolve from the file's folder.
 - **History tabs** — appear once you've visited two docs. Click to jump, `×` to forget.
 - **Appearance** — follows system light/dark; override in **View** menu.
-- Re-run the welcome card anytime: **moremark ▸ Welcome to moremark**.
+- Re-run the welcome card anytime: **markmore ▸ Welcome to markmore**.
 
-MIT · [github.com/jasonmimick/moremark](https://github.com/jasonmimick/moremark)
+MIT · [github.com/jasonmimick/markmore](https://github.com/jasonmimick/markmore)
 """
 
 var cliArgs = CommandLine.arguments
 if cliArgs.count == 1 {
-    // Bare `moremark`: piped input becomes stdin mode, a terminal means "here".
+    // Bare `markmore`: piped input becomes stdin mode, a terminal means "here".
     cliArgs.append(isatty(0) == 0 ? "-" : ".")
 }
 if ["-h", "--help"].contains(cliArgs[1]) {
@@ -178,29 +178,29 @@ if cliArgs[1] == "--stdin-file", cliArgs.count == 3 {
 } else if cliArgs.count == 2 {
     let url = URL(fileURLWithPath: (cliArgs[1] as NSString).expandingTildeInPath).standardizedFileURL
     guard FileManager.default.fileExists(atPath: url.path) else {
-        die("moremark: no such file: \(url.path)", code: 66)
+        die("markmore: no such file: \(url.path)", code: 66)
     }
     initialFile = resolveTarget(url)
 } else {
-    die("usage: moremark [file.md | folder]   or   ... | moremark", code: 64)
+    die("usage: markmore [file.md | folder]   or   ... | markmore", code: 64)
 }
 
 // Detach from the shell: after validating args, re-exec ourselves in the
 // background and return the user to their prompt immediately.
-if ProcessInfo.processInfo.environment["MOREMARK_FOREGROUND"] == nil {
+if ProcessInfo.processInfo.environment["MARKMORE_FOREGROUND"] == nil {
     let exe = Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])
     let child = Process()
     child.executableURL = exe
     if let md = stdinMD {
         let tmp = FileManager.default.temporaryDirectory
-            .appendingPathComponent("moremark-stdin-\(getpid()).md")
+            .appendingPathComponent("markmore-stdin-\(getpid()).md")
         try? md.write(to: tmp, atomically: true, encoding: .utf8)
         child.arguments = ["--stdin-file", tmp.path]
     } else {
         child.arguments = Array(CommandLine.arguments.dropFirst())
     }
     var env = ProcessInfo.processInfo.environment
-    env["MOREMARK_FOREGROUND"] = "1"
+    env["MARKMORE_FOREGROUND"] = "1"
     child.environment = env
     do {
         try child.run()
@@ -225,7 +225,12 @@ func pageHTML(baseHref: String) -> String {
     <style>
     body { margin: 0; background: #ffffff; }
     @media (prefers-color-scheme: dark) { body { background: #0d1117; } }
-    .markdown-body { max-width: 980px; margin: 0 auto; padding: 45px; }
+    .markdown-body { text-rendering: optimizeLegibility; font-variant-ligatures: common-ligatures;
+      -webkit-hyphens: auto; hyphens: auto; }
+    .markdown-body pre, .markdown-body code { hyphens: none; -webkit-hyphens: none; }
+    .markdown-body { max-width: 980px; margin: 0 auto; padding: 45px;
+      font-family: var(--mm-font, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif);
+      font-size: var(--mm-size, 16px); }
     @media (max-width: 767px) { .markdown-body { padding: 24px; } }
     .mermaid { display: flex; justify-content: center; margin-bottom: 16px; }
     #tabbar { display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 9;
@@ -237,10 +242,15 @@ func pageHTML(baseHref: String) -> String {
     .tab.active { background: #ffffff; color: #1f2328; border-color: #d1d9e0; border-bottom-color: #ffffff; }
     .tab .x { opacity: 0.45; cursor: pointer; padding: 0 2px; }
     .tab .x:hover { opacity: 1; }
-    #sidebar { display: none; position: fixed; top: 0; bottom: 0; left: 0; width: 220px; z-index: 8;
-      overflow-y: auto; padding: 12px 8px; box-sizing: border-box;
+    #sidebar { display: none; position: fixed; top: 0; bottom: 0; left: 0;
+      width: var(--sbw, 220px); z-index: 8;
+      overflow-y: auto; overflow-x: auto; padding: 12px 8px; box-sizing: border-box;
       background: #f6f8fa; border-right: 1px solid #d1d9e0;
       font: 12px -apple-system, BlinkMacSystemFont, sans-serif; }
+    #sbdrag { display: none; position: fixed; top: 0; bottom: 0;
+      left: calc(var(--sbw, 220px) - 3px); width: 7px; cursor: col-resize; z-index: 10; }
+    #sbdrag:hover, #sbdrag.live { background: rgba(14, 124, 107, 0.35); }
+    body.tabs-on #sbdrag { top: 32px; }
     .ti { padding: 3px 8px; border-radius: 6px; color: #59636e; cursor: default;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .ti:hover { background: rgba(0,0,0,0.05); }
@@ -258,7 +268,7 @@ func pageHTML(baseHref: String) -> String {
       .ti.active { background: #121d2f; color: #4493f8; }
     }
     body.tabs-on { padding-top: 32px; }
-    body.side-on { padding-left: 220px; }
+    body.side-on { padding-left: var(--sbw, 220px); }
     #welcome { display: none; position: fixed; inset: 0; z-index: 20; align-items: center;
       justify-content: center; background: rgba(15, 23, 30, 0.35); backdrop-filter: blur(6px); }
     .wcard { position: relative; overflow: hidden; width: min(440px, 86vw); text-align: center;
@@ -308,18 +318,12 @@ func pageHTML(baseHref: String) -> String {
     <script>\#(resource(markedJSBase64))</script>
     <script>\#(resource(hljsJSBase64))</script>
     <script>\#(resource(mermaidJSBase64))</script>
-    </head><body><nav id="tabbar"></nav><nav id="sidebar"></nav>
+    </head><body><nav id="tabbar"></nav><nav id="sidebar"></nav><div id="sbdrag"></div>
     <article id="content" class="markdown-body"></article>
     <div id="welcome"><div class="wcard">
       <div class="wlogo">M↓</div>
-      <h1>moremark</h1>
-      <p class="wtag">more for markdown — the one that opens a window.</p>
-      <div class="wfam">
-        <span class="wchip">cat</span><span class="warr">→</span>
-        <span class="wchip">more</span><span class="warr">→</span>
-        <span class="wchip">less</span><span class="warr">→</span>
-        <span class="wchip wme">moremark</span>
-      </div>
+      <h1>markmore</h1>
+      <p class="wtag">markdown, beautifully rendered — straight from your terminal.</p>
       <div class="wtips">
         <div><kbd>⌘B</kbd> file tree</div>
         <div><kbd>⌘⇧H</kbd> hex dump</div>
@@ -327,7 +331,7 @@ func pageHTML(baseHref: String) -> String {
         <div><kbd>⌘W</kbd> back to work</div>
       </div>
       <p class="wlive">edits live-reload — leave the window open while you write ✏️<br>
-      full reference: <b>Help ▸ moremark Help</b> <kbd>⌘?</kbd> · replay this card: <b>moremark ▸ Welcome</b></p>
+      full reference: <b>Help ▸ markmore Help</b> <kbd>⌘?</kbd> · replay this card: <b>markmore ▸ Welcome</b></p>
       <button id="wgo">Let's go</button>
       <div class="wcat">🐈‍⬛</div>
     </div></div>
@@ -403,14 +407,18 @@ func pageHTML(baseHref: String) -> String {
       if (lang && text.length < 200000) { try { hljs.highlightElement(code); } catch (e) {} }
       window.scrollTo(0, y);
     }
-    function __tree(nodes, active, show) {
+    function __tree(nodes, active, show, width) {
       var side = document.getElementById('sidebar');
+      var drag = document.getElementById('sbdrag');
+      if (width) document.documentElement.style.setProperty('--sbw', width + 'px');
       if (!show || !nodes.length) {
         side.style.display = 'none';
+        drag.style.display = 'none';
         document.body.classList.remove('side-on');
         return;
       }
       side.style.display = 'block';
+      drag.style.display = 'block';
       document.body.classList.add('side-on');
       side.innerHTML = '';
       function build(list, container) {
@@ -433,6 +441,24 @@ func pageHTML(baseHref: String) -> String {
       }
       build(nodes, side);
     }
+    (function () {
+      var drag = document.getElementById('sbdrag');
+      var dragging = false;
+      drag.addEventListener('mousedown', function (e) {
+        dragging = true; drag.classList.add('live'); e.preventDefault();
+      });
+      window.addEventListener('mousemove', function (e) {
+        if (!dragging) return;
+        var w = Math.min(480, Math.max(140, e.clientX));
+        document.documentElement.style.setProperty('--sbw', w + 'px');
+      });
+      window.addEventListener('mouseup', function () {
+        if (!dragging) return;
+        dragging = false; drag.classList.remove('live');
+        var w = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sbw')) || 220;
+        window.webkit.messageHandlers.tabs.postMessage({ action: 'sbwidth', path: String(w) });
+      });
+    })();
     function __welcome(show) {
       document.getElementById('welcome').style.display = show ? 'flex' : 'none';
     }
@@ -487,7 +513,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     var backButton: NSButton!
     var forwardButton: NSButton!
 
-    // Sidebar root stays anchored to where moremark was opened.
+    // Sidebar root stays anchored to where markmore was opened.
     let treeRoot: URL? = initialFile.map { isDir($0) ? $0 : $0.deletingLastPathComponent() }
 
     var currentBaseDir: URL {
@@ -504,6 +530,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         config.userContentController.add(self, name: "tabs")
         webView = PreviewWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
+        let savedZoom = UserDefaults.standard.double(forKey: "zoom")
+        if savedZoom > 0 { webView.pageZoom = savedZoom }
 
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 920, height: 780),
@@ -511,7 +539,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             backing: .buffered, defer: false)
         window.contentView = webView
         window.center()
-        window.setFrameAutosaveName("moremark")
+        window.setFrameAutosaveName("markmore")
 
         func navButton(_ symbol: String, tip: String, action: Selector) -> NSButton {
             let b = NSButton(image: NSImage(systemSymbolName: symbol, accessibilityDescription: tip)!,
@@ -572,7 +600,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         let baseHref = URL(fileURLWithPath: currentBaseDir.path, isDirectory: true).absoluteString
         pageCounter += 1
         let pageFile = FileManager.default.temporaryDirectory
-            .appendingPathComponent("moremark-\(getpid())-\(pageCounter).html")
+            .appendingPathComponent("markmore-\(getpid())-\(pageCounter).html")
         if let old = currentPageFile { try? FileManager.default.removeItem(at: old) }
         currentPageFile = pageFile
         try? pageHTML(baseHref: baseHref).write(to: pageFile, atomically: true, encoding: .utf8)
@@ -584,6 +612,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         pageLoaded = true
+        applyTypography()
         render()
         pushTabs()
         pushTree()
@@ -634,7 +663,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
 
     @objc func showHelp() {
         let helpFile = FileManager.default.temporaryDirectory
-            .appendingPathComponent("moremark Help.md")
+            .appendingPathComponent("markmore Help.md")
         try? helpMarkdown.write(to: helpFile, atomically: true, encoding: .utf8)
         if helpFile.standardizedFileURL != currentFile {
             jump(to: helpFile.standardizedFileURL, push: true)
@@ -724,10 +753,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             nodes = treeNodes(root, budget: &budget)
         }
         let active = currentFile?.path ?? ""
+        let sbw = UserDefaults.standard.double(forKey: "sbw")
         guard let data = try? JSONSerialization.data(withJSONObject: [nodes]),
               let json = String(data: data, encoding: .utf8) else { return }
         webView.evaluateJavaScript(
-            "__tree(\(json)[0], \(jsString(active)), \(show))", completionHandler: nil)
+            "__tree(\(json)[0], \(jsString(active)), \(show), \(sbw >= 140 ? sbw : 220))",
+            completionHandler: nil)
     }
 
     @objc func toggleFileTree() {
@@ -762,6 +793,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             }
         case "welcomed":
             UserDefaults.standard.set(true, forKey: "welcomed")
+        case "sbwidth":
+            if let w = Double(path), w >= 140 { UserDefaults.standard.set(w, forKey: "sbw") }
         default: break
         }
     }
@@ -863,6 +896,79 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         source = src
     }
 
+    // MARK: zoom + typography
+
+    func setZoom(_ z: CGFloat) {
+        webView.pageZoom = z
+        UserDefaults.standard.set(Double(z), forKey: "zoom")
+    }
+
+    @objc func zoomIn() { setZoom(min(3.0, webView.pageZoom * 1.1)) }
+    @objc func zoomOut() { setZoom(max(0.5, webView.pageZoom / 1.1)) }
+    @objc func zoomReset() { setZoom(1.0) }
+
+    func currentFont() -> NSFont {
+        let size = UserDefaults.standard.double(forKey: "fontSize")
+        if let name = UserDefaults.standard.string(forKey: "fontFamily"),
+           let f = NSFont(name: name, size: size > 0 ? size : 16) { return f }
+        return NSFont.systemFont(ofSize: size > 0 ? CGFloat(size) : 16)
+    }
+
+    @objc func chooseFont() {
+        let fm = NSFontManager.shared
+        fm.target = self
+        fm.setSelectedFont(currentFont(), isMultiple: false)
+        fm.orderFrontFontPanel(self)
+    }
+
+    @objc func changeFont(_ sender: Any?) {
+        guard let fm = sender as? NSFontManager else { return }
+        let f = fm.convert(currentFont())
+        UserDefaults.standard.set(f.familyName ?? f.fontName, forKey: "fontFamily")
+        UserDefaults.standard.set(Double(f.pointSize), forKey: "fontSize")
+        UserDefaults.standard.set("custom", forKey: "typoPreset")
+        applyTypography()
+    }
+
+    func setPreset(_ p: String) {
+        UserDefaults.standard.set(p, forKey: "typoPreset")
+        applyTypography()
+    }
+
+    @objc func presetSystem() { setPreset("system") }
+    @objc func presetBook() { setPreset("book") }
+    @objc func presetClassic() { setPreset("classic") }
+    @objc func presetMono() { setPreset("mono") }
+
+    func applyTypography() {
+        guard pageLoaded else { return }
+        let preset = UserDefaults.standard.string(forKey: "typoPreset") ?? "system"
+        var fontCSS: String?
+        switch preset {
+        case "book": fontCSS = "ui-serif, 'New York', Georgia, serif"
+        case "classic": fontCSS = "'Iowan Old Style', Palatino, Georgia, serif"
+        case "mono": fontCSS = "ui-monospace, 'SF Mono', Menlo, monospace"
+        case "custom":
+            if let fam = UserDefaults.standard.string(forKey: "fontFamily"), !fam.hasPrefix(".") {
+                fontCSS = "'\(fam)', -apple-system, sans-serif"
+            }
+        default: break
+        }
+        let size = UserDefaults.standard.double(forKey: "fontSize")
+        var js = ""
+        if let fontCSS {
+            js += "document.documentElement.style.setProperty('--mm-font', \(jsString(fontCSS)));"
+        } else {
+            js += "document.documentElement.style.removeProperty('--mm-font');"
+        }
+        if preset == "custom", size > 0 {
+            js += "document.documentElement.style.setProperty('--mm-size', '\(size)px');"
+        } else {
+            js += "document.documentElement.style.removeProperty('--mm-size');"
+        }
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
     // MARK: about + appearance
 
     @objc func showAbout() {
@@ -871,14 +977,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             string: "more for markdown — the one that opens a window.\n\n",
             attributes: [.font: NSFont.systemFont(ofSize: 11)])
         credits.append(NSAttributedString(
-            string: "github.com/jasonmimick/moremark",
-            attributes: [.link: URL(string: "https://github.com/jasonmimick/moremark")!,
+            string: "github.com/jasonmimick/markmore",
+            attributes: [.link: URL(string: "https://github.com/jasonmimick/markmore")!,
                          .font: NSFont.systemFont(ofSize: 11)]))
         credits.append(NSAttributedString(
             string: "\nMIT © Jason Mimick",
             attributes: [.font: NSFont.systemFont(ofSize: 11)]))
         NSApp.orderFrontStandardAboutPanel(options: [
-            .applicationName: "moremark",
+            .applicationName: "markmore",
             .applicationVersion: version,
             .version: "",
             .credits: credits,
@@ -911,6 +1017,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         case #selector(toggleHex):
             item.state = hexMode ? .on : .off
             return currentFile.map { !isDir($0) } ?? (stdinMD != nil)
+        case #selector(presetSystem), #selector(presetBook),
+             #selector(presetClassic), #selector(presetMono):
+            let preset = UserDefaults.standard.string(forKey: "typoPreset") ?? "system"
+            let mine = ["presetSystem:": "system", "presetBook:": "book",
+                        "presetClassic:": "classic", "presetMono:": "mono"]
+            item.state = mine[item.action!.description] == preset ? .on : .off
         case #selector(goBack): return !backStack.isEmpty
         case #selector(goForward): return !forwardStack.isEmpty
         default: break
@@ -931,12 +1043,12 @@ app.setActivationPolicy(.regular)
 let mainMenu = NSMenu()
 let appMenuItem = NSMenuItem(); mainMenu.addItem(appMenuItem)
 let appMenu = NSMenu()
-appMenu.addItem(withTitle: "About moremark", action: #selector(AppDelegate.showAbout), keyEquivalent: "")
-appMenu.addItem(withTitle: "Welcome to moremark", action: #selector(AppDelegate.showWelcome), keyEquivalent: "")
+appMenu.addItem(withTitle: "About markmore", action: #selector(AppDelegate.showAbout), keyEquivalent: "")
+appMenu.addItem(withTitle: "Welcome to markmore", action: #selector(AppDelegate.showWelcome), keyEquivalent: "")
 appMenu.addItem(NSMenuItem.separator())
-appMenu.addItem(withTitle: "Hide moremark", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+appMenu.addItem(withTitle: "Hide markmore", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
 appMenu.addItem(NSMenuItem.separator())
-appMenu.addItem(withTitle: "Quit moremark", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+appMenu.addItem(withTitle: "Quit markmore", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 appMenuItem.submenu = appMenu
 
 let fileMenuItem = NSMenuItem(); mainMenu.addItem(fileMenuItem)
@@ -960,6 +1072,21 @@ viewMenu.addItem(NSMenuItem(title: "Toggle File Tree", action: #selector(AppDele
 viewMenu.addItem(NSMenuItem(title: "Hex Dump", action: #selector(AppDelegate.toggleHex), keyEquivalent: "H"))
 viewMenu.addItem(withTitle: "Reload", action: #selector(AppDelegate.render), keyEquivalent: "r")
 viewMenu.addItem(NSMenuItem.separator())
+viewMenu.addItem(NSMenuItem(title: "Zoom In", action: #selector(AppDelegate.zoomIn), keyEquivalent: "="))
+viewMenu.addItem(NSMenuItem(title: "Zoom Out", action: #selector(AppDelegate.zoomOut), keyEquivalent: "-"))
+viewMenu.addItem(NSMenuItem(title: "Actual Size", action: #selector(AppDelegate.zoomReset), keyEquivalent: "0"))
+viewMenu.addItem(NSMenuItem.separator())
+let typoItem = NSMenuItem(title: "Typography", action: nil, keyEquivalent: "")
+let typoMenu = NSMenu(title: "Typography")
+typoMenu.addItem(NSMenuItem(title: "System", action: #selector(AppDelegate.presetSystem), keyEquivalent: ""))
+typoMenu.addItem(NSMenuItem(title: "Book", action: #selector(AppDelegate.presetBook), keyEquivalent: ""))
+typoMenu.addItem(NSMenuItem(title: "Classic", action: #selector(AppDelegate.presetClassic), keyEquivalent: ""))
+typoMenu.addItem(NSMenuItem(title: "Mono", action: #selector(AppDelegate.presetMono), keyEquivalent: ""))
+typoMenu.addItem(NSMenuItem.separator())
+typoMenu.addItem(NSMenuItem(title: "Choose Font…", action: #selector(AppDelegate.chooseFont), keyEquivalent: "t"))
+typoItem.submenu = typoMenu
+viewMenu.addItem(typoItem)
+viewMenu.addItem(NSMenuItem.separator())
 viewMenu.addItem(NSMenuItem(title: "System Appearance", action: #selector(AppDelegate.appearanceSystem), keyEquivalent: ""))
 viewMenu.addItem(NSMenuItem(title: "Light", action: #selector(AppDelegate.appearanceLight), keyEquivalent: ""))
 viewMenu.addItem(NSMenuItem(title: "Dark", action: #selector(AppDelegate.appearanceDark), keyEquivalent: ""))
@@ -973,7 +1100,7 @@ goMenuItem.submenu = goMenu
 
 let helpMenuItem = NSMenuItem(); mainMenu.addItem(helpMenuItem)
 let helpMenu = NSMenu(title: "Help")
-helpMenu.addItem(NSMenuItem(title: "moremark Help", action: #selector(AppDelegate.showHelp), keyEquivalent: "?"))
+helpMenu.addItem(NSMenuItem(title: "markmore Help", action: #selector(AppDelegate.showHelp), keyEquivalent: "?"))
 helpMenuItem.submenu = helpMenu
 app.helpMenu = helpMenu
 

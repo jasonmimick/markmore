@@ -1,6 +1,6 @@
 #!/bin/bash
 # ./build.sh              build + install to ~/Applications and ~/.local/bin
-# ./build.sh --build-only assemble ./moremark.app in cwd only (used by Homebrew)
+# ./build.sh --build-only assemble ./markmore.app in cwd only (used by Homebrew)
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -22,19 +22,19 @@ let hljsDarkCSSBase64 = "$(b64 hljs-github-dark.css)"
 let mermaidJSBase64 = "$(b64 mermaid.min.js)"
 EOF
 
-swiftc -O -o moremark-bin main.swift Resources.swift
+swiftc -O -o markmore-bin main.swift Resources.swift
 
-if [ ! -f moremark.icns ]; then
+if [ ! -f markmore.icns ]; then
   swift genicon.swift
-  iconutil -c icns moremark.iconset -o moremark.icns
+  iconutil -c icns markmore.iconset -o markmore.icns
 fi
 
-APP="moremark.app"
+APP="markmore.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp moremark-bin "$APP/Contents/MacOS/moremark"
+cp markmore-bin "$APP/Contents/MacOS/markmore"
 cp Info.plist "$APP/Contents/Info.plist"
-cp moremark.icns "$APP/Contents/Resources/moremark.icns"
+cp markmore.icns "$APP/Contents/Resources/markmore.icns"
 codesign --force --sign - "$APP" >/dev/null 2>&1 || true
 
 if [ "${1:-}" = "--build-only" ]; then
@@ -42,13 +42,13 @@ if [ "${1:-}" = "--build-only" ]; then
   exit 0
 fi
 
-rm -rf "$HOME/Applications/moremark.app"
+rm -rf "$HOME/Applications/markmore.app"
 mkdir -p "$HOME/Applications"
-cp -R "$APP" "$HOME/Applications/moremark.app"
+cp -R "$APP" "$HOME/Applications/markmore.app"
 mkdir -p "$HOME/.local/bin"
-cat > "$HOME/.local/bin/moremark" <<'EOF'
+cat > "$HOME/.local/bin/markmore" <<'EOF'
 #!/bin/bash
-exec "$HOME/Applications/moremark.app/Contents/MacOS/moremark" "$@"
+exec "$HOME/Applications/markmore.app/Contents/MacOS/markmore" "$@"
 EOF
-chmod +x "$HOME/.local/bin/moremark"
-echo "installed: ~/Applications/moremark.app + ~/.local/bin/moremark"
+chmod +x "$HOME/.local/bin/markmore"
+echo "installed: ~/Applications/markmore.app + ~/.local/bin/markmore"

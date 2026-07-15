@@ -1,22 +1,24 @@
 # the tour
 
-**bold**, *italic*, `code`, [a link](https://github.com/jasonmimick/moremark), and a task list:
+**bold**, *italic*, `code`, [a link](https://github.com/jasonmimick/markmore), and a task list:
 
 - [x] native window
 - [x] live reload
 - [ ] your feature here
 
-| member | year | renders where |
-|---|---|---|
-| cat | 1971 | terminal |
-| more | 1978 | terminal |
-| less | 1983 | terminal |
-| moremark | 2026 | a real window |
+| feature | keys |
+|---|---|
+| file tree | ⌘B |
+| hex dump | ⌘⇧H |
+| zoom | ⌘+ / ⌘- |
+| typography | View ▸ Typography |
 
 ```mermaid
 graph LR
-  cat --> more --> less --> moremark
-  moremark -->|Cmd+Shift+H| hex[raw bytes]
+  A[terminal] -->|markmore file.md| B[native window]
+  B --> C[GitHub styling]
+  B --> D[mermaid]
+  B --> E[hex, when you need it]
 ```
 
 ```python

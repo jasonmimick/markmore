@@ -3,21 +3,21 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>moremark</string>
+	<string>markmore</string>
 	<key>CFBundleDisplayName</key>
-	<string>moremark</string>
+	<string>markmore</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.jasonmimick.moremark</string>
+	<string>com.jasonmimick.markmore</string>
 	<key>CFBundleExecutable</key>
-	<string>moremark</string>
+	<string>markmore</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleVersion</key>
-	<string>0.7.0</string>
+	<string>0.8.0</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.7.0</string>
+	<string>0.8.0</string>
 	<key>CFBundleIconFile</key>
-	<string>moremark</string>
+	<string>markmore</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSPrincipalClass</key>

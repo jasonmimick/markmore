@@ -1,6 +1,6 @@
 # samples/
 
-A little playground. Open this folder with `moremark samples/` and press `Cmd+B` for the file tree.
+A little playground. Open this folder with `markmore samples/` and press `Cmd+B` for the file tree.
 
 - [tour.md](tour.md) — markdown, mermaid, tables, code
 - [hello.swift](hello.swift) — source files render syntax-highlighted

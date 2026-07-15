@@ -1,5 +1,5 @@
-// Rasterizes icon.svg into moremark.iconset/ (NSImage renders SVG natively on macOS 11+).
-// Run: swift genicon.swift && iconutil -c icns moremark.iconset -o moremark.icns
+// Rasterizes icon.svg into markmore.iconset/ (NSImage renders SVG natively on macOS 11+).
+// Run: swift genicon.swift && iconutil -c icns markmore.iconset -o markmore.icns
 
 import Cocoa
 
@@ -23,10 +23,10 @@ func rasterize(_ px: Int) -> Data {
     return rep.representation(using: .png, properties: [:])!
 }
 
-let out = URL(fileURLWithPath: "moremark.iconset")
+let out = URL(fileURLWithPath: "markmore.iconset")
 try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
 for pt in [16, 32, 128, 256, 512] {
     try! rasterize(pt).write(to: out.appendingPathComponent("icon_\(pt)x\(pt).png"))
     try! rasterize(pt * 2).write(to: out.appendingPathComponent("icon_\(pt)x\(pt)@2x.png"))
 }
-print("wrote moremark.iconset from icon.svg")
+print("wrote markmore.iconset from icon.svg")

@@ -1,28 +1,28 @@
 ---
-name: moremark
-displayName: moremark — markdown preview window
+name: markmore
+displayName: markmore — markdown preview window
 description: Preview markdown files in a native macOS window with GitHub rendering, live reload, and mermaid diagrams, straight from the CLI.
 keywords: [markdown, preview, viewer, macos, mermaid, documentation]
 ---
 
-# moremark
+# markmore
 
 `more` for markdown — the one that opens a window. Renders any markdown file with GitHub styling (highlighted code, tables, mermaid diagrams) in a native macOS window that live-reloads on save.
 
 ## Onboarding
 
-1. Verify macOS — moremark is macOS-native (no Linux/Windows).
+1. Verify macOS — markmore is macOS-native (no Linux/Windows).
 2. Install if missing:
    ```sh
-   command -v moremark || brew install jasonmimick/moremark/moremark
+   command -v markmore || brew install jasonmimick/markmore/markmore
    ```
    Builds from source via `swiftc` in seconds; no Gatekeeper prompts.
 
 ## Usage
 
 ```sh
-moremark path/to/file.md       # detaches on its own — the prompt returns immediately
-some-command | moremark -      # preview stdin
+markmore path/to/file.md       # detaches on its own — the prompt returns immediately
+some-command | markmore -      # preview stdin
 ```
 
 - The window live-reloads on save — don't relaunch after editing the same file.
