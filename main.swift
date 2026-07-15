@@ -302,9 +302,12 @@ func pageHTML(baseHref: String) -> String {
       kbd { background: #21262d; border-color: #3d444d; color: #f0f6fc; }
     }
     </style>
+    <style>\#(resource(katexCSSBase64))</style>
     <script>\#(resource(markedJSBase64))</script>
     <script>\#(resource(hljsJSBase64))</script>
     <script>\#(resource(mermaidJSBase64))</script>
+    <script>\#(resource(katexJSBase64))</script>
+    <script>\#(resource(katexAutoJSBase64))</script>
     </head><body><nav id="tabbar"></nav>
     <article id="content" class="markdown-body"></article>
     <div id="welcome"><div class="wcard">
@@ -345,6 +348,18 @@ func pageHTML(baseHref: String) -> String {
         mermaid.initialize({ startOnLoad: false, theme: darkMQ.matches ? 'dark' : 'default' });
         mermaid.run({ nodes: nodes }).catch(function () {});
       }
+      try {
+        renderMathInElement(el, {
+          delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '\\[', right: '\\]', display: true },
+            { left: '\\(', right: '\\)', display: false },
+            { left: '$', right: '$', display: false }
+          ],
+          throwOnError: false,
+          ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        });
+      } catch (e) {}
       window.scrollTo(0, y);
     }
     function __tabs(list, active) {
