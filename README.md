@@ -4,7 +4,7 @@
 
 **Markdown, beautifully rendered — straight from your terminal.**
 
-`markmore README.md` opens a native macOS window with your markdown the way it's meant to look — GitHub styling, syntax-highlighted code, mermaid diagrams, live reload. One Swift file. No Electron. ~5MB.
+`markmore README.md` opens a native macOS window with your markdown the way it's meant to look — GitHub styling, syntax-highlighted code, mermaid diagrams, live reload.
 
 ```sh
 markmore                  # right here — opens ./README.md, or a folder index
