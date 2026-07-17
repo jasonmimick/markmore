@@ -117,7 +117,10 @@ usage:
   markmore -w <file|folder>  open the native window instead (live reload,
                              file tree, tabs, hex view, any file type)
   ... | markmore             preview stdin
+  markmore -f <file.md>      follow mode: live re-render on save (^C stops)
   markmore --snap <file.md>  terminal render as one full-fidelity image
+
+  Piping (e.g. markmore notes.md | less -R) emits plain ANSI, no graphics.
   markmore --default-md      make markmore the default app for .md files
   markmore --no-default-md   hand .md files back to the previous app
 
@@ -202,7 +205,8 @@ var windowMode = cliArgs.contains("-w") || cliArgs.contains("--window")
 let termSnap = cliArgs.contains("--snap")
 let makeDefault = cliArgs.contains("--default-md")
 let unmakeDefault = cliArgs.contains("--no-default-md")
-cliArgs.removeAll { ["-w", "--window", "-t", "--term", "--snap", "--default-md", "--no-default-md"].contains($0) }
+let followMode = cliArgs.contains("-f") || cliArgs.contains("--follow")
+cliArgs.removeAll { ["-w", "--window", "-t", "--term", "--snap", "--default-md", "--no-default-md", "-f", "--follow"].contains($0) }
 var launchedByLaunchServices = false
 
 func mdUTType() -> UTType {

@@ -503,7 +503,30 @@ func termIsDark() -> Bool {
 }
 
 final class TermHybridDelegate: NSObject, NSApplicationDelegate {
+    var rendering = false
+    var pendingRender = false
+    var watcher: DispatchSourceFileSystemObject?
+    var currentRaster: SnippetRasterizer?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        renderOnce(first: true)
+        if followMode {
+            guard initialFile != nil else { die("markmore -f needs a file or folder", code: 64) }
+            watchTarget()
+        }
+    }
+
+    // Graphics only make sense when a capable terminal is actually looking:
+    // piped output (e.g. | less -R) degrades to pure ANSI automatically.
+    var useGraphics: Bool {
+        guard termProtocol != nil else { return false }
+        if ProcessInfo.processInfo.environment["MARKMORE_TERM_PROTOCOL"] != nil { return true }
+        return isatty(STDOUT_FILENO) != 0
+    }
+
+    func renderOnce(first: Bool) {
+        if rendering { pendingRender = true; return }
+        rendering = true
         let dark = termIsDark()
         var cols = 80
         var cssWidth: CGFloat = 640
@@ -514,11 +537,20 @@ final class TermHybridDelegate: NSObject, NSApplicationDelegate {
         }
         cols = min(cols, 110)
 
-        let renderer = HybridRenderer(cols: cols, dark: dark, graphics: termProtocol != nil)
+        let renderer = HybridRenderer(cols: cols, dark: dark, graphics: useGraphics)
         let (pieces, snippets) = renderer.render(termMarkdownContent())
 
         func emit(_ images: [Data?]) {
             let out = FileHandle.standardOutput
+            var payload = Data()
+            if followMode {
+                // clear screen + delete old kitty images, then redraw
+                payload.append("\u{1b}[2J\u{1b}[H".data(using: .utf8)!)
+                if self.useGraphics, termProtocol != "iterm" {
+                    payload.append("\u{1b}_Ga=d\u{1b}\\".data(using: .utf8)!)
+                }
+            }
+            out.write(payload)
             for piece in pieces {
                 switch piece {
                 case .text(let t):
@@ -534,9 +566,20 @@ final class TermHybridDelegate: NSObject, NSApplicationDelegate {
             }
             if isatty(STDOUT_FILENO) != 0 {
                 let p = TermPalette(dark: dark)
-                out.write((p.dim + "── markmore -w opens the window" + p.reset + "\n").data(using: .utf8)!)
+                let hint = followMode ? "── following (^C to stop) · markmore -w opens the window"
+                                      : "── markmore -w opens the window"
+                out.write((p.dim + hint + p.reset + "\n").data(using: .utf8)!)
             }
-            exit(0)
+            self.rendering = false
+            self.currentRaster = nil
+            if followMode {
+                if self.pendingRender {
+                    self.pendingRender = false
+                    self.renderOnce(first: false)
+                }
+            } else {
+                exit(0)
+            }
         }
 
         if snippets.isEmpty {
@@ -545,11 +588,41 @@ final class TermHybridDelegate: NSObject, NSApplicationDelegate {
             let baseDir = initialFile.map { isDir($0) ? $0 : $0.deletingLastPathComponent() }
                 ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             let raster = SnippetRasterizer(snippets: snippets, cssWidth: cssWidth, dark: dark, baseDir: baseDir)
-            objc_setAssociatedObject(self, "raster", raster, .OBJC_ASSOCIATION_RETAIN)
+            currentRaster = raster
             raster.start { images in emit(images) }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 25) {
-                die("markmore -t: render timed out", code: 70)
+            if first {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 25) {
+                    if self.rendering, !followMode { die("markmore: render timed out", code: 70) }
+                }
             }
         }
+    }
+
+    // Editors save atomically — re-arm on delete/rename like the window mode does.
+    func watchTarget() {
+        watcher?.cancel()
+        watcher = nil
+        guard let file = initialFile else { return }
+        let fd = open(file.path, O_EVTONLY)
+        guard fd >= 0 else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.watchTarget() }
+            return
+        }
+        let src = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd, eventMask: [.write, .extend, .delete, .rename], queue: .main)
+        src.setEventHandler { [weak self] in
+            guard let self else { return }
+            let flags = src.data
+            NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(self.refresh), object: nil)
+            self.perform(#selector(self.refresh), with: nil, afterDelay: 0.25)
+            if flags.contains(.delete) || flags.contains(.rename) { self.watchTarget() }
+        }
+        src.setCancelHandler { close(fd) }
+        src.resume()
+        watcher = src
+    }
+
+    @objc func refresh() {
+        renderOnce(first: false)
     }
 }
