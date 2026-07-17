@@ -5,6 +5,7 @@
 
 import Cocoa
 import WebKit
+import UniformTypeIdentifiers
 
 func die(_ msg: String, code: Int32) -> Never {
     FileHandle.standardError.write((msg + "\n").data(using: .utf8)!)
@@ -117,6 +118,8 @@ usage:
                              file tree, tabs, hex view, any file type)
   ... | markmore             preview stdin
   markmore --snap <file.md>  terminal render as one full-fidelity image
+  markmore --default-md      make markmore the default app for .md files
+                             (also offered once in the window on launch)
 
 in the window:
   ⌘B      file tree                  ⌘[ / ⌘]   back / forward
@@ -186,10 +189,26 @@ MIT · [github.com/jasonmimick/markmore](https://github.com/jasonmimick/markmore
 """
 
 var cliArgs = CommandLine.arguments
-let windowMode = cliArgs.contains("-w") || cliArgs.contains("--window")
+var windowMode = cliArgs.contains("-w") || cliArgs.contains("--window")
 let termSnap = cliArgs.contains("--snap")
-cliArgs.removeAll { ["-w", "--window", "-t", "--term", "--snap"].contains($0) }
-let termMode = !windowMode
+let makeDefault = cliArgs.contains("--default-md")
+cliArgs.removeAll { ["-w", "--window", "-t", "--term", "--snap", "--default-md"].contains($0) }
+var launchedByLaunchServices = false
+
+if makeDefault {
+    let mdType = UTType("net.daringfireball.markdown") ?? UTType(filenameExtension: "md")!
+    var done = false
+    NSWorkspace.shared.setDefaultApplication(at: Bundle.main.bundleURL, toOpen: mdType) { error in
+        if let error {
+            FileHandle.standardError.write("markmore: \(error.localizedDescription)\n".data(using: .utf8)!)
+            exit(1)
+        }
+        print("markmore is now the default app for .md — try: open README.md")
+        done = true
+    }
+    while !done { RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.1)) }
+    exit(0)
+}
 if cliArgs.count == 1 {
     // Bare `markmore`: piped input becomes stdin mode, a terminal means "here".
     cliArgs.append(isatty(0) == 0 ? "-" : ".")
@@ -203,7 +222,14 @@ if cliArgs[1] == "--stdin-file", cliArgs.count == 3 {
     try? FileManager.default.removeItem(atPath: cliArgs[2])
 } else if cliArgs[1] == "-" {
     let data = FileHandle.standardInput.readDataToEndOfFile()
-    stdinMD = String(data: data, encoding: .utf8) ?? ""
+    if data.isEmpty, CommandLine.arguments.count == 1 {
+        // No args, no tty, empty stdin: launched by `open` / LaunchServices.
+        // The document arrives as an open-event; wait for it in window mode.
+        launchedByLaunchServices = true
+        windowMode = true
+    } else {
+        stdinMD = String(data: data, encoding: .utf8) ?? ""
+    }
 } else if cliArgs.count == 2 {
     let url = URL(fileURLWithPath: (cliArgs[1] as NSString).expandingTildeInPath).standardizedFileURL
     guard FileManager.default.fileExists(atPath: url.path) else {
@@ -232,10 +258,14 @@ if termSnap && termProtocol == nil {
     die("markmore --snap needs a graphics-capable terminal (kitty, ghostty, WezTerm, iTerm2)", code: 69)
 }
 
+let termMode = !windowMode
+
 // Detach from the shell: after validating args, re-exec ourselves in the
 // background and return the user to their prompt immediately.
-// Terminal mode stays in the foreground — it writes to this tty.
-if !termMode, ProcessInfo.processInfo.environment["MARKMORE_FOREGROUND"] == nil {
+// Terminal mode stays in the foreground; a LaunchServices launch must keep
+// this process alive or the open-event would be lost.
+if !termMode, !launchedByLaunchServices,
+   ProcessInfo.processInfo.environment["MARKMORE_FOREGROUND"] == nil {
     let exe = Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])
     let child = Process()
     child.executableURL = exe
@@ -597,6 +627,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     var hexMode = false
     var backButton: NSButton!
     var forwardButton: NSButton!
+    var pendingOpenURLs: [URL] = []
     var splitView: NSSplitView!
     var sidebarScroll: NSScrollView!
     var outlineView: NSOutlineView!
@@ -696,6 +727,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         }
 
         loadPage()
+        if let first = pendingOpenURLs.first {
+            pendingOpenURLs = []
+            navigate(to: resolveTarget(first.standardizedFileURL))
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { self.maybeOfferDefaultMD() }
+    }
+
+    // `open file.md` / double-click delivers documents as open-events.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let url = urls.first else { return }
+        if webView == nil {
+            pendingOpenURLs = urls
+        } else {
+            navigate(to: resolveTarget(url.standardizedFileURL))
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    // Legacy single-file event path — some launch routes still use it.
+    func application(_ sender: NSApplication, openFile filename: String) -> Bool {
+        self.application(sender, open: [URL(fileURLWithPath: filename)])
+        return true
+    }
+
+    // One-time, post-welcome offer to become the default .md app.
+    func maybeOfferDefaultMD() {
+        let defaults = UserDefaults.standard
+        guard defaults.bool(forKey: "welcomed"), !defaults.bool(forKey: "askedDefaultMD") else { return }
+        let mdType = UTType("net.daringfireball.markdown") ?? UTType(filenameExtension: "md")!
+        defaults.set(true, forKey: "askedDefaultMD")
+        if let current = NSWorkspace.shared.urlForApplication(toOpen: mdType),
+           current == Bundle.main.bundleURL {
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = "Open Markdown files with markmore?"
+        alert.informativeText = "\"open README.md\" and double-clicks will render here. Change anytime via Get Info on any .md file, or run: markmore --default-md"
+        alert.addButton(withTitle: "Make Default")
+        alert.addButton(withTitle: "Not Now")
+        alert.beginSheetModal(for: window) { response in
+            guard response == .alertFirstButtonReturn else { return }
+            NSWorkspace.shared.setDefaultApplication(at: Bundle.main.bundleURL, toOpen: mdType) { _ in }
+        }
     }
 
     func noteRecent(_ url: URL) {
