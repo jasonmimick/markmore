@@ -119,7 +119,7 @@ usage:
   ... | markmore             preview stdin
   markmore --snap <file.md>  terminal render as one full-fidelity image
   markmore --default-md      make markmore the default app for .md files
-                             (also offered once in the window on launch)
+  markmore --no-default-md   hand .md files back to the previous app
 
 in the window:
   ⌘B      file tree                  ⌘[ / ⌘]   back / forward
@@ -192,19 +192,73 @@ var cliArgs = CommandLine.arguments
 var windowMode = cliArgs.contains("-w") || cliArgs.contains("--window")
 let termSnap = cliArgs.contains("--snap")
 let makeDefault = cliArgs.contains("--default-md")
-cliArgs.removeAll { ["-w", "--window", "-t", "--term", "--snap", "--default-md"].contains($0) }
+let unmakeDefault = cliArgs.contains("--no-default-md")
+cliArgs.removeAll { ["-w", "--window", "-t", "--term", "--snap", "--default-md", "--no-default-md"].contains($0) }
 var launchedByLaunchServices = false
 
-if makeDefault {
-    let mdType = UTType("net.daringfireball.markdown") ?? UTType(filenameExtension: "md")!
+func mdUTType() -> UTType {
+    UTType("net.daringfireball.markdown") ?? UTType(filenameExtension: "md")!
+}
+
+// Remember whoever was default before us, so we can hand it back politely.
+func setMarkmoreDefault(_ completion: @escaping (Error?) -> Void) {
+    if let prev = NSWorkspace.shared.urlForApplication(toOpen: mdUTType()),
+       prev != Bundle.main.bundleURL {
+        UserDefaults.standard.set(prev.path, forKey: "previousMDHandler")
+    }
+    NSWorkspace.shared.setDefaultApplication(at: Bundle.main.bundleURL, toOpen: mdUTType()) { error in
+        completion(error)
+    }
+}
+
+func unsetMarkmoreDefault(_ completion: @escaping (URL, Error?) -> Void) {
+    var target: URL?
+    if let prev = UserDefaults.standard.string(forKey: "previousMDHandler"),
+       FileManager.default.fileExists(atPath: prev),
+       !prev.lowercased().contains("markmore") {
+        target = URL(fileURLWithPath: prev)
+    }
+    if target == nil {
+        // Hand off to any other app that actually claims markdown.
+        target = NSWorkspace.shared.urlsForApplications(toOpen: mdUTType())
+            .first { !$0.path.lowercased().contains("markmore") }
+    }
+    guard let target else {
+        completion(Bundle.main.bundleURL,
+                   NSError(domain: "markmore", code: 1, userInfo:
+                    [NSLocalizedDescriptionKey: "no other installed app claims .md files"]))
+        return
+    }
+    NSWorkspace.shared.setDefaultApplication(at: target, toOpen: mdUTType()) { error in
+        completion(target, error)
+    }
+}
+
+func markmoreIsDefault() -> Bool {
+    NSWorkspace.shared.urlForApplication(toOpen: mdUTType()) == Bundle.main.bundleURL
+}
+
+if makeDefault || unmakeDefault {
     var done = false
-    NSWorkspace.shared.setDefaultApplication(at: Bundle.main.bundleURL, toOpen: mdType) { error in
-        if let error {
-            FileHandle.standardError.write("markmore: \(error.localizedDescription)\n".data(using: .utf8)!)
-            exit(1)
+    if makeDefault {
+        setMarkmoreDefault { error in
+            if let error {
+                FileHandle.standardError.write("markmore: \(error.localizedDescription)\n".data(using: .utf8)!)
+                exit(1)
+            }
+            print("markmore is now the default app for .md — try: open README.md")
+            done = true
         }
-        print("markmore is now the default app for .md — try: open README.md")
-        done = true
+    } else {
+        print("macOS will ask you to confirm the change…")
+        unsetMarkmoreDefault { target, error in
+            if error != nil {
+                print("markmore stays the default — cancelled or no other app claims .md")
+                exit(0)
+            }
+            print(".md files handed back to \(target.deletingPathExtension().lastPathComponent)")
+            done = true
+        }
     }
     while !done { RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.1)) }
     exit(0)
@@ -755,20 +809,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     func maybeOfferDefaultMD() {
         let defaults = UserDefaults.standard
         guard defaults.bool(forKey: "welcomed"), !defaults.bool(forKey: "askedDefaultMD") else { return }
-        let mdType = UTType("net.daringfireball.markdown") ?? UTType(filenameExtension: "md")!
         defaults.set(true, forKey: "askedDefaultMD")
-        if let current = NSWorkspace.shared.urlForApplication(toOpen: mdType),
-           current == Bundle.main.bundleURL {
-            return
-        }
+        if markmoreIsDefault() { return }
         let alert = NSAlert()
         alert.messageText = "Open Markdown files with markmore?"
-        alert.informativeText = "\"open README.md\" and double-clicks will render here. Change anytime via Get Info on any .md file, or run: markmore --default-md"
+        alert.informativeText = "\"open README.md\" and double-clicks will render here. Undo anytime from the markmore menu, or: markmore --no-default-md"
         alert.addButton(withTitle: "Make Default")
         alert.addButton(withTitle: "Not Now")
         alert.beginSheetModal(for: window) { response in
             guard response == .alertFirstButtonReturn else { return }
-            NSWorkspace.shared.setDefaultApplication(at: Bundle.main.bundleURL, toOpen: mdType) { _ in }
+            setMarkmoreDefault { _ in }
+        }
+    }
+
+    @objc func toggleDefaultMD() {
+        if markmoreIsDefault() {
+            unsetMarkmoreDefault { _, _ in }
+        } else {
+            setMarkmoreDefault { _ in }
         }
     }
 
@@ -1461,6 +1519,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             item.state = mine[item.action!.description] == preset ? .on : .off
         case #selector(goBack): return !backStack.isEmpty
         case #selector(goForward): return !forwardStack.isEmpty
+        case #selector(toggleDefaultMD):
+            item.title = markmoreIsDefault()
+                ? "Stop Opening .md by Default" : "Open .md Files by Default"
         default: break
         }
         return true
@@ -1636,6 +1697,8 @@ let appMenuItem = NSMenuItem(); mainMenu.addItem(appMenuItem)
 let appMenu = NSMenu()
 appMenu.addItem(withTitle: "About markmore", action: #selector(AppDelegate.showAbout), keyEquivalent: "")
 appMenu.addItem(withTitle: "Welcome to markmore", action: #selector(AppDelegate.showWelcome), keyEquivalent: "")
+appMenu.addItem(NSMenuItem.separator())
+appMenu.addItem(withTitle: "Open .md Files by Default", action: #selector(AppDelegate.toggleDefaultMD), keyEquivalent: "")
 appMenu.addItem(NSMenuItem.separator())
 appMenu.addItem(withTitle: "Hide markmore", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
 appMenu.addItem(NSMenuItem.separator())
