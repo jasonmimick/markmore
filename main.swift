@@ -158,16 +158,25 @@ With `-w` the window detaches — your prompt returns immediately.
 
 | keys | action |
 |---|---|
-| `⌘B` | file tree (native, live-refreshing; root folder shown on top) |
+| `⌘O` | open any file or folder |
+| `⌘B` | file tree (native, live-refreshing; root folder on top) |
 | `⌘⇧T` | table of contents — floating outline of the doc's headings |
 | `⌘F` | find in page (Enter next, ⇧Enter previous, Esc closes) |
-| `⌘=` / `⌘-` / `⌘0` | zoom in / out / reset |
-| `⌘T` | font panel · **View ▸ Typography** for presets (Book is the serif one) |
+| `⌘=` | zoom in |
+| `⌘-` | zoom out |
+| `⌘0` | actual size |
+| `⌘T` | font panel — **View ▸ Typography** for presets (Book is the serif one) |
 | `⌘⇧H` | hex dump the current file (any file — old unix souls welcome) |
-| `⌘[` / `⌘]` | back / forward (also the ‹ › titlebar buttons) |
+| `⌘[` | back (also the ‹ titlebar button) |
+| `⌘]` | forward (also the › titlebar button) |
 | `⌘P` | print — i.e. save a beautifully typeset PDF |
-| `⌘⇧R` / `⌥⌘C` / `⌘E` | reveal in Finder / copy path / open in editor |
-| `⌘R` | re-render · `⌘W` close · `⌘Q` quit · `⌘?` this page |
+| `⌘⇧R` | reveal in Finder |
+| `⌥⌘C` | copy path |
+| `⌘E` | open in your default editor |
+| `⌘R` | re-render |
+| `⌘W` | close window |
+| `⌘Q` | quit |
+| `⌘?` | this page |
 
 ## Terminal mode
 
